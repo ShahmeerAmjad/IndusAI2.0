@@ -1,0 +1,46 @@
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.2
+pydantic-settings==2.1.0
+python-multipart==0.0.6
+
+# Environment & Configuration
+python-dotenv==1.0.0
+
+# HTTP & Async
+httpx==0.25.2
+aiofiles==23.2.1
+
+# Database & Caching
+asyncpg==0.29.0
+redis==5.0.1
+
+# AI & NLP
+anthropic==0.8.1
+fuzzywuzzy==0.18.0
+python-levenshtein==0.23.0
+
+# Security & Auth
+cryptography==41.0.7
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+PyJWT==2.8.0
+
+# Rate Limiting
+slowapi==0.1.9
+
+# Monitoring
+prometheus-client==0.19.0
+
+# Email (optional)
+aiosmtplib==3.0.1
+
+# Templating
+jinja2==3.1.2
+
+# Development
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
+flake8==6.1.0
