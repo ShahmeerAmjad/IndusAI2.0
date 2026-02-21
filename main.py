@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-MRO Platform - B2B AI Chatbot
-Production-ready chatbot for industrial MRO (Maintenance, Repair, Operations) customer support.
+MRO Platform — Agentic Back-Office / Middle-Office Operating System
+for Industrial MRO Distributors.
+
+Modules: Product Catalog, Inventory, Orders (O2C), Quotes, Pricing,
+Procurement (P2P), Invoicing, Payments, RMA/Returns, Workflows, Analytics.
+Omnichannel conversational interface (WhatsApp, Web, Email, SMS).
 """
 
 import os
@@ -54,13 +58,28 @@ from services.escalation_service import EscalationService
 from services.intent_classifier import IntentClassifier
 from services.spam_detector import spam_detector
 
+# Platform services
+from services.platform.erp_connector import MockERPConnector
+from services.platform.workflow_engine import WorkflowEngine
+from services.platform.product_service import ProductService
+from services.platform.inventory_service import InventoryService
+from services.platform.customer_service import CustomerService
+from services.platform.pricing_service import PricingService
+from services.platform.order_service import OrderService
+from services.platform.quote_service import QuoteService
+from services.platform.procurement_service import ProcurementService
+from services.platform.invoice_service import InvoiceService
+from services.platform.rma_service import RMAService
+from services.platform.analytics_service import AnalyticsService
+from routes.platform import router as platform_router, set_services
+
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
 
 load_dotenv()
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "3.0.0"
 BASE_DIR = Path(__file__).resolve().parent
 
 # ---------------------------------------------------------------------------
@@ -217,13 +236,36 @@ db_manager = DatabaseManager(logger=logger, settings=settings)
 classifier = IntentClassifier()
 ai_service = AIService(logger=logger, settings=settings)
 escalation_service = EscalationService(settings=settings, logger=logger, db_manager=db_manager)
+comm_manager = CommunicationManager(logger=logger, settings=settings)
+
+# Platform services — initialised after DB pool is ready (see lifespan)
+erp_connector = MockERPConnector()
+workflow_engine = WorkflowEngine(db_manager, logger)
+product_service = ProductService(db_manager, logger)
+inventory_service = InventoryService(db_manager, logger)
+customer_service = CustomerService(db_manager, logger)
+pricing_service = PricingService(db_manager, logger)
+order_service = OrderService(db_manager, customer_service, pricing_service,
+                             inventory_service, workflow_engine, logger)
+quote_service = QuoteService(db_manager, pricing_service, order_service, logger)
+procurement_service = ProcurementService(db_manager, inventory_service, workflow_engine, logger)
+invoice_service = InvoiceService(db_manager, customer_service, logger)
+rma_service = RMAService(db_manager, inventory_service, workflow_engine, logger)
+analytics_service = AnalyticsService(db_manager, logger)
+
 business_logic = BusinessLogic(
     ai_service=ai_service,
     db_manager=db_manager,
     settings=settings,
     escalation_service=escalation_service,
+    product_service=product_service,
+    inventory_service=inventory_service,
+    pricing_service=pricing_service,
+    order_service=order_service,
+    quote_service=quote_service,
+    customer_service=customer_service,
+    rma_service=rma_service,
 )
-comm_manager = CommunicationManager(logger=logger, settings=settings)
 chatbot = ChatbotEngine(
     logger=logger,
     business_logic=business_logic,
@@ -246,6 +288,44 @@ async def lifespan(app: FastAPI):
 
     await db_manager.initialize()
 
+    # Create platform tables & indexes
+    if db_manager.pool:
+        try:
+            from services.platform.schema import PLATFORM_SCHEMA, PLATFORM_INDEXES
+            async with db_manager.pool.acquire() as conn:
+                await conn.execute(PLATFORM_SCHEMA)
+                await conn.execute(PLATFORM_INDEXES)
+            logger.info("Platform schema ready")
+        except Exception as e:
+            logger.error(f"Platform schema creation failed: {e}")
+
+    # Inject services into the platform API router
+    set_services({
+        "product_service": product_service,
+        "inventory_service": inventory_service,
+        "customer_service": customer_service,
+        "pricing_service": pricing_service,
+        "order_service": order_service,
+        "quote_service": quote_service,
+        "procurement_service": procurement_service,
+        "invoice_service": invoice_service,
+        "rma_service": rma_service,
+        "workflow_engine": workflow_engine,
+        "analytics_service": analytics_service,
+    })
+
+    # Seed demo data in debug mode
+    if settings.debug and db_manager.pool:
+        try:
+            from services.platform.seed import seed_database
+            await seed_database(
+                db_manager, product_service, pricing_service,
+                customer_service, procurement_service,
+                inventory_service, logger,
+            )
+        except Exception as e:
+            logger.error(f"Seed failed: {e}")
+
     if settings.debug:
         token = create_admin_token("admin")
         logger.info(f"Dev admin token: {token}")
@@ -259,10 +339,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="MRO Platform API",
-    description="B2B AI chatbot for industrial MRO customer support",
+    description="Agentic Back-Office / Middle-Office Operating System for Industrial MRO Distributors",
     version=APP_VERSION,
     lifespan=lifespan,
 )
+
+# Platform API routes
+app.include_router(platform_router)
 
 # Rate limiter
 app.state.limiter = limiter
@@ -273,7 +356,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if settings.debug else ["https://*.yourdomain.com", "http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
     max_age=86400,
 )
@@ -371,14 +454,18 @@ async def root():
         "documentation": "/docs",
         "health": "/health",
         "features": [
-            "AI-enhanced responses (Claude)",
-            "Intent classification",
-            "WhatsApp Business integration",
-            "Rate limiting & spam detection",
-            "Session management (Redis)",
-            "Escalation tickets",
-            "Admin dashboard",
-            "Prometheus metrics",
+            "Product Catalog & Search",
+            "Inventory Management & Reorder Alerts",
+            "Order-to-Cash (Orders, Quotes, Fulfillment)",
+            "Procure-to-Pay (POs, Goods Receipt, Suppliers)",
+            "Dynamic Pricing Engine & Customer Contracts",
+            "Invoicing, Payments & AR Aging",
+            "RMA / Returns Processing",
+            "Workflow Approvals Engine",
+            "Analytics & Dashboard Metrics",
+            "AI-enhanced Conversational Interface (Claude)",
+            "WhatsApp Business Integration",
+            "Prometheus Metrics & Admin Dashboard",
         ],
     }
 

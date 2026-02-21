@@ -32,6 +32,7 @@ COPY --from=base /usr/local/bin /usr/local/bin
 COPY main.py .
 COPY models/ models/
 COPY services/ services/
+COPY routes/ routes/
 COPY metrics/ metrics/
 COPY templates/ templates/
 
