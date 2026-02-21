@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MRO Platform - Admin Dashboard</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            color: #1a1a1a;
+        }
+        .header {
+            background: linear-gradient(135deg, #0c2461 0%, #1e3a8a 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header h1 { margin-bottom: 0.5rem; }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .controls {
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .btn {
+            background: #1e3a8a;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        .btn:hover {
+            background: #0c2461;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(30, 58, 138, 0.4);
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .metric-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.3s;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+        }
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #1e3a8a;
+            margin-bottom: 0.5rem;
+        }
+        .metric-label {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .messages {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .messages h2 {
+            padding: 1.5rem;
+            border-bottom: 1px solid #eee;
+            color: #333;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td {
+            padding: 1rem 1.5rem;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+        td { color: #333; }
+        tr:hover { background: #f8f9fa; }
+        .confidence-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .confidence-high { background: #d4edda; color: #155724; }
+        .confidence-medium { background: #fff3cd; color: #856404; }
+        .confidence-low { background: #f8d7da; color: #721c24; }
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .status-healthy { background: #28a745; }
+        .status-degraded { background: #ffc107; }
+        .status-error { background: #dc3545; }
+        .loading { text-align: center; padding: 2rem; color: #666; }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        .token-input {
+            flex: 1;
+            min-width: 300px;
+            padding: 0.75rem 1rem;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .token-input:focus {
+            border-color: #1e3a8a;
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.2);
+        }
+        .token-input::placeholder { color: #999; font-size: 0.95rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>MRO Platform Admin Dashboard</h1>
+        <p>Monitor AI customer service performance in real-time</p>
+    </div>
+
+    <div class="container">
+        <div class="controls">
+            <input id="jwt-token" class="token-input" placeholder="Enter JWT Access Token" />
+            <button class="btn" onclick="setToken()">Set Token</button>
+            <button class="btn" onclick="loadData()">Refresh</button>
+            <button class="btn" onclick="toggleAutoRefresh()">
+                <span id="auto-refresh-status">Auto-refresh: OFF</span>
+            </button>
+        </div>
+
+        <div class="metrics" id="metrics">
+            <div class="metric-card">
+                <div class="metric-value" id="total-messages">-</div>
+                <div class="metric-label">Total Messages</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="avg-confidence">-</div>
+                <div class="metric-label">Avg Confidence</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="avg-response-time">-</div>
+                <div class="metric-label">Avg Response Time</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="health-status">-</div>
+                <div class="metric-label">System Health</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="escalation-count">-</div>
+                <div class="metric-label">Escalations</div>
+            </div>
+        </div>
+
+        <div class="messages">
+            <h2>Recent Messages</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>From</th>
+                        <th>Message</th>
+                        <th>Type</th>
+                        <th>Confidence</th>
+                        <th>Response Time</th>
+                    </tr>
+                </thead>
+                <tbody id="messages-tbody">
+                    <tr><td colspan="6" class="loading">Loading messages...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshInterval = null;
+        let jwtToken = "";
+
+        function setToken() {
+            jwtToken = document.getElementById('jwt-token').value.trim();
+            if (!jwtToken) {
+                alert('Please enter a valid JWT token');
+            } else {
+                alert('JWT token set successfully!');
+                loadData();
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            return div.innerHTML;
+        }
+
+        async function loadData() {
+            try {
+                const headers = jwtToken
+                    ? { 'Authorization': 'Bearer ' + jwtToken }
+                    : {};
+
+                const metricsResponse = await fetch('/admin/api/metrics', { headers });
+                if (!metricsResponse.ok) throw new Error('Failed to load metrics');
+                const metrics = await metricsResponse.json();
+
+                document.getElementById('total-messages').textContent = metrics.total_messages;
+                document.getElementById('avg-confidence').textContent = (metrics.avg_confidence * 100).toFixed(1) + '%';
+                document.getElementById('avg-response-time').textContent = (metrics.avg_response_time * 1000).toFixed(0) + 'ms';
+                document.getElementById('escalation-count').textContent = metrics.escalation_count || 0;
+
+                const healthResponse = await fetch('/health');
+                const health = await healthResponse.json();
+                const healthEl = document.getElementById('health-status');
+                healthEl.innerHTML = '<span class="status-indicator status-healthy"></span>' + health.status;
+
+                const tbody = document.getElementById('messages-tbody');
+                if (metrics.recent_messages.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="loading">No messages yet</td></tr>';
+                } else {
+                    tbody.innerHTML = metrics.recent_messages.map(function(msg) {
+                        const confidence = msg.confidence * 100;
+                        let confidenceClass = 'confidence-low';
+                        if (confidence >= 80) confidenceClass = 'confidence-high';
+                        else if (confidence >= 60) confidenceClass = 'confidence-medium';
+
+                        const timestamp = new Date(msg.timestamp);
+                        const timeStr = timestamp.toLocaleTimeString() + ' ' + timestamp.toLocaleDateString();
+
+                        return '<tr>' +
+                            '<td>' + escapeHtml(timeStr) + '</td>' +
+                            '<td>' + escapeHtml(msg.from_id) + '</td>' +
+                            '<td title="' + escapeHtml(msg.content) + '">' + escapeHtml(msg.content.substring(0, 50)) + (msg.content.length > 50 ? '...' : '') + '</td>' +
+                            '<td>' + escapeHtml(msg.message_type) + '</td>' +
+                            '<td><span class="confidence-badge ' + confidenceClass + '">' + confidence.toFixed(0) + '%</span></td>' +
+                            '<td>' + (msg.response_time * 1000).toFixed(0) + 'ms</td>' +
+                            '</tr>';
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Failed to load data:', error);
+                document.getElementById('messages-tbody').innerHTML =
+                    '<tr><td colspan="6" class="error">Failed to load data. Check your JWT token and try again.</td></tr>';
+            }
+        }
+
+        function toggleAutoRefresh() {
+            const statusEl = document.getElementById('auto-refresh-status');
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                statusEl.textContent = 'Auto-refresh: OFF';
+            } else {
+                autoRefreshInterval = setInterval(loadData, 5000);
+                statusEl.textContent = 'Auto-refresh: ON';
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>

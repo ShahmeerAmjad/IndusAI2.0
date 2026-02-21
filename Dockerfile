@@ -1,38 +1,47 @@
-# Frontend Dockerfile for IndustrialIQ Dashboard
+# MRO Platform Backend - Python/FastAPI
 # Multi-stage build for optimized production image
 
-# Stage 1: Build
-FROM node:20-alpine AS builder
+# Stage 1: Dependencies
+FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# System deps for asyncpg and other compiled packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-RUN npm ci
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY . .
+# Stage 2: Application
+FROM python:3.12-slim AS production
 
-# Build the application
-RUN npm run build
+WORKDIR /app
 
-# Stage 2: Production with nginx
-FROM nginx:alpine AS production
+# Runtime deps only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 wget && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy installed packages from base
+COPY --from=base /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=base /usr/local/bin /usr/local/bin
 
-# Copy built application from builder
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Copy application code
+COPY main.py .
+COPY models/ models/
+COPY services/ services/
+COPY metrics/ metrics/
+COPY templates/ templates/
 
-# Expose port
-EXPOSE 80
+# Non-root user for security
+RUN useradd -m appuser
+USER appuser
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:80 || exit 1
+EXPOSE 8000
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8000/health || exit 1
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
