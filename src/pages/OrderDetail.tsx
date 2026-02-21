@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, Order } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useParams, useNavigate } from "react-router-dom";
 import { formatCurrency, statusColor, cn } from "@/lib/utils";
 

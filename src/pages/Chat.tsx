@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { api, ChatResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { MessageCircle, Send } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -109,19 +110,7 @@ export default function Chat() {
       {/* Chat Header */}
       <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4 rounded-t-lg">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600">
-          <svg
-            className="h-5 w-5 text-white"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-            />
-          </svg>
+          <MessageCircle className="h-5 w-5 text-white" />
         </div>
         <div>
           <div className="flex items-center gap-2">
@@ -240,19 +229,7 @@ export default function Chat() {
             disabled={isLoading || !input.trim()}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
-              />
-            </svg>
+            <Send className="h-5 w-5" />
           </button>
         </form>
         <p className="mt-2 text-center text-[11px] text-gray-400">

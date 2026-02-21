@@ -1,16 +1,28 @@
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import {
+  LayoutDashboard,
+  Package,
+  Warehouse,
+  ClipboardList,
+  MessageSquareQuote,
+  Truck,
+  Receipt,
+  RotateCcw,
+  Bot,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-const NAV_ITEMS = [
-  { to: "/", label: "Dashboard", icon: "📊" },
-  { to: "/products", label: "Products", icon: "📦" },
-  { to: "/inventory", label: "Inventory", icon: "🏭" },
-  { to: "/orders", label: "Orders", icon: "📋" },
-  { to: "/quotes", label: "Quotes", icon: "💬" },
-  { to: "/procurement", label: "Procurement", icon: "🚚" },
-  { to: "/invoices", label: "Invoicing", icon: "💰" },
-  { to: "/rma", label: "Returns", icon: "🔄" },
-  { to: "/chat", label: "AI Assistant", icon: "🤖" },
+const NAV_ITEMS: Array<{ to: string; label: string; icon: LucideIcon }> = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/products", label: "Products", icon: Package },
+  { to: "/inventory", label: "Inventory", icon: Warehouse },
+  { to: "/orders", label: "Orders", icon: ClipboardList },
+  { to: "/quotes", label: "Quotes", icon: MessageSquareQuote },
+  { to: "/procurement", label: "Procurement", icon: Truck },
+  { to: "/invoices", label: "Invoicing", icon: Receipt },
+  { to: "/rma", label: "Returns", icon: RotateCcw },
+  { to: "/chat", label: "AI Assistant", icon: Bot },
 ];
 
 export default function Sidebar() {
@@ -43,7 +55,7 @@ export default function Sidebar() {
               )
             }
           >
-            <span className="text-base">{item.icon}</span>
+            <item.icon className="h-[18px] w-[18px] shrink-0" />
             {item.label}
           </NavLink>
         ))}

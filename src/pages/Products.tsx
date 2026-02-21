@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, Product } from "@/lib/api";
 import { useState } from "react";
-import { formatCurrency, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { Search, ChevronRight } from "lucide-react";
 
 export default function Products() {
   const navigate = useNavigate();
@@ -64,19 +65,7 @@ export default function Products() {
       {/* Search Bar */}
       <form onSubmit={handleSearchSubmit} className="flex gap-3">
         <div className="relative flex-1">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
           <input
             type="text"
             value={search}
@@ -129,14 +118,7 @@ export default function Products() {
                 <span className="inline-block bg-industrial-100 text-industrial-800 text-xs font-semibold px-2.5 py-1 rounded-md font-mono">
                   {product.sku}
                 </span>
-                <svg
-                  className="h-4 w-4 text-neutral-300 group-hover:text-industrial-600 transition-colors"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
+                <ChevronRight className="h-4 w-4 text-neutral-300 group-hover:text-industrial-600 transition-colors" />
               </div>
 
               {/* Product Name */}

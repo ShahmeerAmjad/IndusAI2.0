@@ -1,4 +1,5 @@
 import { useLocation } from "react-router-dom";
+import { Bell, User } from "lucide-react";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
@@ -27,8 +28,11 @@ export default function Header() {
           <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
           <span className="text-xs text-slate-500">System Online</span>
         </div>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-600">
-          OP
+        <button className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+          <Bell className="h-4 w-4" />
+        </button>
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-500">
+          <User className="h-4 w-4" />
         </div>
       </div>
     </header>

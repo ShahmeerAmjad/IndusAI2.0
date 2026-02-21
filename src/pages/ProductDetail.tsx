@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, Product } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useParams, useNavigate } from "react-router-dom";
-import { formatCurrency, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { ChevronLeft } from "lucide-react";
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -76,14 +77,7 @@ export default function ProductDetail() {
         onClick={() => navigate(-1)}
         className="inline-flex items-center gap-1.5 text-sm text-neutral-600 hover:text-industrial-800 transition-colors group"
       >
-        <svg
-          className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
+        <ChevronLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
         Back to Products
       </button>
 

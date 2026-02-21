@@ -28,7 +28,7 @@ class DatabaseManager:
                 self.settings.database_url,
                 min_size=2,
                 max_size=10,
-                command_timeout=60,
+                command_timeout=10,
             )
             self.logger.info("PostgreSQL connection pool established")
             await self._create_tables()

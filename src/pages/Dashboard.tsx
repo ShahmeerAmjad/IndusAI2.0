@@ -15,6 +15,17 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import {
+  DollarSign,
+  Package,
+  ClipboardList,
+  TrendingUp,
+  AlertTriangle,
+  FileText,
+  CircleAlert,
+  RotateCcw,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -23,16 +34,17 @@ import {
 interface KpiCard {
   label: string;
   value: string;
-  icon: string;
+  icon: LucideIcon;
   border: string;           // Tailwind border-l color class
   bg: string;               // Tailwind background tint class
   iconBg: string;           // icon circle background
+  iconColor: string;        // icon stroke color
 }
 
 interface AlertCard {
   label: string;
   value: number;
-  icon: string;
+  icon: LucideIcon;
   border: string;
   textColor: string;
 }
@@ -206,34 +218,38 @@ export default function Dashboard() {
     {
       label: "Revenue Today",
       value: formatCurrency(metrics.revenue_today),
-      icon: "\u{1F4B0}",            // money bag
+      icon: DollarSign,
       border: "border-l-emerald-500",
       bg: "bg-emerald-50/60",
       iconBg: "bg-emerald-100",
+      iconColor: "text-emerald-600",
     },
     {
       label: "Orders Today",
       value: formatNumber(metrics.orders_today),
-      icon: "\u{1F4E6}",            // package
+      icon: Package,
       border: "border-l-blue-600",
       bg: "bg-blue-50/60",
       iconBg: "bg-blue-100",
+      iconColor: "text-blue-600",
     },
     {
       label: "Open Orders",
       value: formatNumber(metrics.open_orders),
-      icon: "\u{1F4CB}",            // clipboard
+      icon: ClipboardList,
       border: "border-l-indigo-500",
       bg: "bg-indigo-50/60",
       iconBg: "bg-indigo-100",
+      iconColor: "text-indigo-600",
     },
     {
       label: "Revenue This Month",
       value: formatCurrency(metrics.revenue_this_month),
-      icon: "\u{1F4C8}",            // chart increasing
+      icon: TrendingUp,
       border: "border-l-emerald-600",
       bg: "bg-emerald-50/40",
       iconBg: "bg-emerald-100",
+      iconColor: "text-emerald-600",
     },
   ];
 
@@ -241,28 +257,28 @@ export default function Dashboard() {
     {
       label: "Low Stock Items",
       value: metrics.low_stock_items,
-      icon: "\u{26A0}\uFE0F",       // warning
+      icon: AlertTriangle,
       border: "border-l-orange-400",
       textColor: "text-orange-600",
     },
     {
       label: "Pending Invoices",
       value: metrics.pending_invoices,
-      icon: "\u{1F4C4}",            // page facing up
+      icon: FileText,
       border: "border-l-blue-400",
       textColor: "text-blue-600",
     },
     {
       label: "Overdue Invoices",
       value: metrics.overdue_invoices,
-      icon: "\u{1F534}",            // red circle
+      icon: CircleAlert,
       border: "border-l-red-500",
       textColor: "text-red-600",
     },
     {
       label: "Open RMAs",
       value: metrics.open_rmas,
-      icon: "\u{1F504}",            // counterclockwise arrows
+      icon: RotateCcw,
       border: "border-l-amber-500",
       textColor: "text-amber-600",
     },
@@ -320,11 +336,11 @@ export default function Dashboard() {
               </div>
               <div
                 className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-lg text-lg",
+                  "flex h-10 w-10 items-center justify-center rounded-lg",
                   card.iconBg,
                 )}
               >
-                {card.icon}
+                <card.icon className={cn("h-5 w-5", card.iconColor)} />
               </div>
             </div>
           </div>
@@ -342,7 +358,7 @@ export default function Dashboard() {
             )}
           >
             <div className="flex items-center gap-2">
-              <span className="text-base">{card.icon}</span>
+              <card.icon className={cn("h-4 w-4", card.textColor)} />
               <span className="text-xs font-medium text-slate-500">
                 {card.label}
               </span>
@@ -533,7 +549,8 @@ export default function Dashboard() {
                       ))}
                     </Pie>
                     <Tooltip
-                      content={({ active, payload }: { active?: boolean; payload?: Array<{ payload: CustomerPieItem }> }) => {
+                      content={(props) => {
+                        const { active, payload } = props as { active?: boolean; payload?: Array<{ payload: CustomerPieItem }> };
                         if (!active || !payload?.length) return null;
                         const d: CustomerPieItem = payload[0].payload;
                         return (

@@ -123,7 +123,7 @@ class Settings(BaseSettings):
     # App
     app_name: str = "MRO Platform"
     debug: bool = Field(default=False)
-    secret_key: str = Field(default="change-me-to-a-secure-key-at-least-32-chars!!")
+    secret_key: str = Field(default=...)
 
     # Admin
     admin_api_key: Optional[str] = Field(default=None)
@@ -363,9 +363,17 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def _count_requests(request: Request, call_next):
+async def _security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if not settings.debug:
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     app.state.request_count += 1
-    return await call_next(request)
+    return response
 
 
 # ===========================================================================

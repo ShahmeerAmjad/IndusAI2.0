@@ -20,10 +20,6 @@ function post<T>(path: string, body: unknown) {
   return request<T>(path, { method: "POST", body: JSON.stringify(body) });
 }
 
-function put<T>(path: string, body: unknown) {
-  return request<T>(path, { method: "PUT", body: JSON.stringify(body) });
-}
-
 function patch<T>(path: string, body?: unknown) {
   return request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined });
 }
