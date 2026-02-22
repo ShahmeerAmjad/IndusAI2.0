@@ -10,19 +10,36 @@ import {
   Receipt,
   RotateCcw,
   Bot,
+  Radio,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-const NAV_ITEMS: Array<{ to: string; label: string; icon: LucideIcon }> = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/products", label: "Products", icon: Package },
-  { to: "/inventory", label: "Inventory", icon: Warehouse },
-  { to: "/orders", label: "Orders", icon: ClipboardList },
-  { to: "/quotes", label: "Quotes", icon: MessageSquareQuote },
-  { to: "/procurement", label: "Procurement", icon: Truck },
-  { to: "/invoices", label: "Invoicing", icon: Receipt },
-  { to: "/rma", label: "Returns", icon: RotateCcw },
-  { to: "/chat", label: "AI Assistant", icon: Bot },
+interface NavSection {
+  label: string;
+  items: Array<{ to: string; label: string; icon: LucideIcon }>;
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Back-Office",
+    items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/products", label: "Products", icon: Package },
+      { to: "/inventory", label: "Inventory", icon: Warehouse },
+      { to: "/orders", label: "Orders", icon: ClipboardList },
+      { to: "/quotes", label: "Quotes", icon: MessageSquareQuote },
+      { to: "/procurement", label: "Procurement", icon: Truck },
+      { to: "/invoices", label: "Invoicing", icon: Receipt },
+      { to: "/rma", label: "Returns", icon: RotateCcw },
+    ],
+  },
+  {
+    label: "Front-Office",
+    items: [
+      { to: "/channels", label: "Channels", icon: Radio },
+      { to: "/chat", label: "AI Assistant", icon: Bot },
+    ],
+  },
 ];
 
 export default function Sidebar() {
@@ -40,24 +57,33 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-[hsl(var(--sidebar-accent))] text-white"
-                  : "text-slate-400 hover:bg-white/5 hover:text-white"
-              )
-            }
-          >
-            <item.icon className="h-[18px] w-[18px] shrink-0" />
-            {item.label}
-          </NavLink>
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.label} className="mb-4">
+            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              {section.label}
+            </p>
+            <div className="space-y-0.5">
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === "/"}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-[hsl(var(--sidebar-accent))] text-white"
+                        : "text-slate-400 hover:bg-white/5 hover:text-white"
+                    )
+                  }
+                >
+                  <item.icon className="h-[18px] w-[18px] shrink-0" />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 

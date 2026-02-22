@@ -198,6 +198,42 @@ export interface ChatResponse {
   error?: string;
 }
 
+export interface ChannelMessage {
+  id: string;
+  from_id: string;
+  content: string;
+  channel: string;
+  message_type: string;
+  confidence: number;
+  response_content: string | null;
+  response_time: number | null;
+  timestamp: string;
+}
+
+export interface ChannelStats {
+  channels: Record<string, {
+    message_count: number;
+    avg_response_time: number;
+    avg_confidence: number;
+    last_message_at: string | null;
+  }>;
+  total_messages: number;
+  open_escalations: number;
+  total_escalations: number;
+}
+
+export interface EscalationTicket {
+  id: string;
+  customer_id: string;
+  subject: string;
+  description: string | null;
+  priority: string;
+  status: string;
+  assigned_to: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------- API Functions ----------
 
 export const api = {
@@ -256,4 +292,11 @@ export const api = {
   // Pricing
   getPrice: (productId: string, qty = 1) => get<unknown>(`/pricing/${productId}?quantity=${qty}`),
   getPriceTiers: (productId: string) => get<unknown>(`/pricing/${productId}/tiers`),
+
+  // Channels / Omnichannel
+  getChannelStats: () => get<ChannelStats>("/channels/stats"),
+  getChannelMessages: (page = 1, channel = "") =>
+    get<PaginatedResponse<ChannelMessage>>(`/channels/messages?page=${page}&page_size=20${channel ? `&channel=${channel}` : ""}`),
+  getEscalations: (page = 1, status = "") =>
+    get<PaginatedResponse<EscalationTicket>>(`/channels/escalations?page=${page}&page_size=20${status ? `&status=${status}` : ""}`),
 };

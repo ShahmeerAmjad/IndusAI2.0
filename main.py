@@ -479,6 +479,141 @@ async def root():
 
 
 # ===========================================================================
+# Channels / Omnichannel API
+# ===========================================================================
+
+
+@platform_router.get("/channels/messages")
+async def get_channel_messages(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|web|sms)$"),
+):
+    """Get paginated message history with optional channel filter."""
+    if not db_manager.pool:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
+
+    async with db_manager.pool.acquire() as conn:
+        where = "WHERE channel = $3" if channel else ""
+        params_count: list = [page_size, (page - 1) * page_size]
+        params_rows: list = [page_size, (page - 1) * page_size]
+        if channel:
+            params_count.append(channel)
+            params_rows.append(channel)
+
+        total = await conn.fetchval(
+            f"SELECT COUNT(*) FROM messages {where}",
+            *([channel] if channel else []),
+        )
+        rows = await conn.fetch(
+            f"""
+            SELECT id, from_id, content, channel, message_type, confidence,
+                   response_content, response_time, timestamp
+            FROM messages {where}
+            ORDER BY timestamp DESC
+            LIMIT $1 OFFSET $2
+            """,
+            page_size, (page - 1) * page_size,
+            *([channel] if channel else []),
+        )
+        items = [dict(r) for r in rows]
+        for item in items:
+            if item.get("id"):
+                item["id"] = str(item["id"])
+            if item.get("timestamp"):
+                item["timestamp"] = item["timestamp"].isoformat()
+
+    import math as _math
+    total_pages = _math.ceil(total / page_size) if total else 0
+    return {"items": items, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages}
+
+
+@platform_router.get("/channels/stats")
+async def get_channel_stats():
+    """Get per-channel message counts and aggregate metrics."""
+    if not db_manager.pool:
+        return {"channels": {}, "total_messages": 0, "total_escalations": 0}
+
+    async with db_manager.pool.acquire() as conn:
+        channel_rows = await conn.fetch(
+            """
+            SELECT channel, COUNT(*) as message_count,
+                   AVG(response_time) as avg_response_time,
+                   AVG(confidence) as avg_confidence,
+                   MAX(timestamp) as last_message_at
+            FROM messages
+            GROUP BY channel
+            ORDER BY message_count DESC
+            """
+        )
+        total = await conn.fetchval("SELECT COUNT(*) FROM messages")
+        escalation_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM escalation_tickets WHERE status IN ('open', 'in_progress')"
+        )
+        total_escalations = await conn.fetchval("SELECT COUNT(*) FROM escalation_tickets")
+
+    channels = {}
+    for row in channel_rows:
+        channels[row["channel"]] = {
+            "message_count": row["message_count"],
+            "avg_response_time": round(float(row["avg_response_time"] or 0), 2),
+            "avg_confidence": round(float(row["avg_confidence"] or 0), 2),
+            "last_message_at": row["last_message_at"].isoformat() if row["last_message_at"] else None,
+        }
+
+    return {
+        "channels": channels,
+        "total_messages": total or 0,
+        "open_escalations": escalation_count or 0,
+        "total_escalations": total_escalations or 0,
+    }
+
+
+@platform_router.get("/channels/escalations")
+async def get_escalation_tickets(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: Optional[str] = Query(None, pattern="^(open|in_progress|resolved|closed)$"),
+):
+    """Get escalation tickets with optional status filter."""
+    if not db_manager.pool:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
+
+    async with db_manager.pool.acquire() as conn:
+        where = "WHERE status = $3" if status else ""
+
+        total = await conn.fetchval(
+            f"SELECT COUNT(*) FROM escalation_tickets {where}",
+            *([status] if status else []),
+        )
+        rows = await conn.fetch(
+            f"""
+            SELECT id, customer_id, subject, description, priority, status,
+                   assigned_to, created_at, updated_at
+            FROM escalation_tickets {where}
+            ORDER BY
+                CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                created_at DESC
+            LIMIT $1 OFFSET $2
+            """,
+            page_size, (page - 1) * page_size,
+            *([status] if status else []),
+        )
+        items = [dict(r) for r in rows]
+        for item in items:
+            if item.get("id"):
+                item["id"] = str(item["id"])
+            if item.get("created_at"):
+                item["created_at"] = item["created_at"].isoformat()
+            if item.get("updated_at"):
+                item["updated_at"] = item["updated_at"].isoformat()
+
+    import math as _math
+    total_pages = _math.ceil(total / page_size) if total else 0
+    return {"items": items, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages}
+
+
+# ===========================================================================
 # Message API
 # ===========================================================================
 

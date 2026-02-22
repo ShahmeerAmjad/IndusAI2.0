@@ -10,6 +10,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/procurement": "Procurement",
   "/invoices": "Invoicing & Payments",
   "/rma": "Returns & RMA",
+  "/channels": "Omnichannel Hub",
   "/chat": "AI Assistant",
 };
 

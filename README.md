@@ -33,7 +33,12 @@ Agentic back-office / middle-office operating system for industrial MRO (Mainten
 ```
 ┌──────────────────────────────────────────────────┐
 │                   React Frontend                  │
-│  (Vite + TypeScript + Tailwind + React Query)     │
+│  ┌─ Back-Office ──────┐  ┌─ Front-Office ──────┐ │
+│  │ Dashboard, Orders, │  │ Omnichannel Hub,    │ │
+│  │ Inventory, Quotes, │  │ AI Chat Assistant   │ │
+│  │ Procurement, RMA   │  │ (WhatsApp, Email,   │ │
+│  │ Invoicing, Products│  │  SMS, Fax, Web)     │ │
+│  └────────────────────┘  └─────────────────────┘ │
 └────────────────────┬─────────────────────────────┘
                      │  /api/v1/*
 ┌────────────────────▼─────────────────────────────┐
@@ -52,6 +57,7 @@ Agentic back-office / middle-office operating system for industrial MRO (Mainten
 │  ┌─ Core Services ──────────────────────────────┐ │
 │  │ AI (Claude) · Chatbot · Intent Classifier    │ │
 │  │ Business Logic · Spam Detector · Escalation  │ │
+│  │ Omnichannel (WhatsApp · Email · SMS · Fax)   │ │
 │  └──────────────────────────────────────────────┘ │
 └───────┬──────────────────────────┬───────────────┘
         │                          │
@@ -132,7 +138,7 @@ npx tsc --noEmit -p tsconfig.app.json
 
 ## API Overview
 
-52 REST endpoints under `/api/v1`:
+55+ REST endpoints under `/api/v1`:
 
 | Module | Endpoints | Methods |
 |--------|-----------|---------|
@@ -149,6 +155,7 @@ npx tsc --noEmit -p tsconfig.app.json
 | RMA | `/rma`, `/rma/{id}`, `/rma/{id}/approve\|receive\|refund` | GET, POST |
 | Workflows | `/workflows`, `/workflows/{id}/transition` | GET, POST |
 | Analytics | `/analytics/dashboard`, `/analytics/sales` | GET |
+| Channels | `/channels/stats`, `/channels/messages`, `/channels/escalations` | GET |
 | Chat | `/message` | POST |
 
 Health and monitoring: `GET /health`, `GET /health/detailed`, `GET /metrics`
@@ -206,7 +213,7 @@ GitHub Actions runs on push/PR to `main` and `develop`:
 │   ├── lib/
 │   │   ├── api.ts            # Typed API client (27 methods)
 │   │   └── utils.ts          # formatCurrency, statusColor, cn
-│   ├── pages/                # 11 page components
+│   ├── pages/                # 12 page components
 │   └── __tests__/            # 3 test suites, 28 tests
 ├── docker-compose.yml         # PostgreSQL + Redis + Backend
 ├── Dockerfile                 # Multi-stage Python 3.12
