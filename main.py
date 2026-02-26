@@ -85,6 +85,7 @@ from routes.platform import router as platform_router, set_services
 from routes.auth import router as auth_router, set_auth_service, get_current_user
 from services.auth_service import AuthService
 from routes.sourcing import router as sourcing_router, set_sourcing_services
+from routes.rfq import router as rfq_router, set_rfq_db
 from services.seller_service import SellerService
 from services.intelligence.location import LocationOptimizer
 from services.intelligence.price_comparator import PriceComparator
@@ -391,6 +392,9 @@ async def lifespan(app: FastAPI):
     set_auth_service(auth_service)
     app.state.auth_service = auth_service
 
+    # Wire RFQ routes
+    set_rfq_db(db_manager)
+
     # Inject services into the platform API router
     set_services({
         "product_service": product_service,
@@ -456,6 +460,7 @@ app = FastAPI(
 app.include_router(platform_router)
 app.include_router(auth_router)
 app.include_router(sourcing_router)
+app.include_router(rfq_router)
 
 # Rate limiter
 app.state.limiter = limiter
