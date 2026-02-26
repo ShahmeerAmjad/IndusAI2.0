@@ -32,6 +32,9 @@ neo4j>=5.20,<6.0
 PyJWT>=2.8,<3.0
 bcrypt>=4.0,<5.0
 
+# Scheduling
+apscheduler>=3.10,<4.0
+
 # Rate Limiting
 slowapi>=0.1.9,<1.0
 

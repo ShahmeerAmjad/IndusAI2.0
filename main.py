@@ -89,6 +89,9 @@ from routes.rfq import router as rfq_router, set_rfq_db
 from services.seller_service import SellerService
 from services.intelligence.location import LocationOptimizer
 from services.intelligence.price_comparator import PriceComparator
+from services.intelligence.reliability import ReliabilityScorer
+from services.intelligence.freshness_scheduler import FreshnessScheduler
+from services.ingestion.web_scraper import WebScraper
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -367,6 +370,22 @@ async def lifespan(app: FastAPI):
         app.state.query_engine = query_engine
         app.state.llm_router = llm_router
         app.state.seller_service = seller_service
+
+        # Initialize freshness scheduler
+        reliability_scorer = ReliabilityScorer()
+        web_scraper = WebScraper(
+            llm_router=llm_router,
+            firecrawl_api_key=settings.firecrawl_api_key,
+        )
+        freshness_scheduler = FreshnessScheduler(
+            seller_service=seller_service,
+            web_scraper=web_scraper,
+            reliability_scorer=reliability_scorer,
+            db_manager=db_manager,
+        )
+        freshness_scheduler.start()
+        app.state.freshness_scheduler = freshness_scheduler
+
         logger.info("GraphRAG query engine ready (with sourcing)")
 
     except Exception as e:
@@ -438,6 +457,11 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info(f"Shutting down {settings.app_name}")
+    # Stop freshness scheduler
+    scheduler = getattr(app.state, "freshness_scheduler", None)
+    if scheduler:
+        scheduler.shutdown()
+
     # Close Neo4j connection
     if neo4j_client:
         try:
