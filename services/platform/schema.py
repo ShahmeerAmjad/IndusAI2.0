@@ -394,6 +394,54 @@ CREATE TABLE IF NOT EXISTS workflow_transitions (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Auth & Multi-tenancy
+CREATE TABLE IF NOT EXISTS organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    plan TEXT NOT NULL DEFAULT 'free',
+    primary_location_id UUID,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    org_id UUID REFERENCES organizations(id),
+    role TEXT NOT NULL DEFAULT 'buyer',
+    is_active BOOLEAN DEFAULT true,
+    last_login_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS locations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID REFERENCES organizations(id),
+    label TEXT NOT NULL,
+    address TEXT,
+    city TEXT,
+    state TEXT,
+    zip TEXT,
+    country TEXT DEFAULT 'US',
+    lat DOUBLE PRECISION,
+    lng DOUBLE PRECISION,
+    is_primary BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT UNIQUE NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 """
 
 PLATFORM_INDEXES = """
@@ -463,4 +511,11 @@ CREATE INDEX IF NOT EXISTS idx_workflows_type ON workflows(workflow_type);
 CREATE INDEX IF NOT EXISTS idx_workflows_ref ON workflows(reference_type, reference_id);
 CREATE INDEX IF NOT EXISTS idx_workflows_state ON workflows(current_state);
 CREATE INDEX IF NOT EXISTS idx_wf_transitions_wf ON workflow_transitions(workflow_id);
+
+-- Auth
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_org ON users(org_id);
+CREATE INDEX IF NOT EXISTS idx_locations_org ON locations(org_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
 """
