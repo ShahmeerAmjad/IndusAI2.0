@@ -84,6 +84,10 @@ from services.platform.analytics_service import AnalyticsService
 from routes.platform import router as platform_router, set_services
 from routes.auth import router as auth_router, set_auth_service, get_current_user
 from services.auth_service import AuthService
+from routes.sourcing import router as sourcing_router, set_sourcing_services
+from services.seller_service import SellerService
+from services.intelligence.location import LocationOptimizer
+from services.intelligence.price_comparator import PriceComparator
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -336,21 +340,33 @@ async def lifespan(app: FastAPI):
         # Wire intent classifier with LLM router
         classifier._llm = llm_router
 
-        # Initialize GraphRAG Query Engine
+        # Initialize sourcing intelligence services
+        seller_service = SellerService(db_manager, logger)
+        location_optimizer = LocationOptimizer()
+        price_comparator = PriceComparator()
+
+        # Initialize GraphRAG Query Engine (with sourcing)
         query_engine = GraphRAGQueryEngine(
             graph_service=graph_service,
             llm_router=llm_router,
             intent_classifier=classifier,
             entity_extractor=entity_extractor,
             part_parser=part_parser,
+            seller_service=seller_service,
+            location_optimizer=location_optimizer,
+            price_comparator=price_comparator,
         )
+
+        # Wire sourcing API routes
+        set_sourcing_services(query_engine, seller_service, db_manager)
 
         # Store on app state for endpoint access
         app.state.neo4j_client = neo4j_client
         app.state.graph_service = graph_service
         app.state.query_engine = query_engine
         app.state.llm_router = llm_router
-        logger.info("GraphRAG query engine ready")
+        app.state.seller_service = seller_service
+        logger.info("GraphRAG query engine ready (with sourcing)")
 
     except Exception as e:
         logger.warning("Knowledge graph initialization failed (non-fatal): %s", e)
@@ -439,6 +455,7 @@ app = FastAPI(
 # Platform API routes
 app.include_router(platform_router)
 app.include_router(auth_router)
+app.include_router(sourcing_router)
 
 # Rate limiter
 app.state.limiter = limiter
