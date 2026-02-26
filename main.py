@@ -160,6 +160,9 @@ class Settings(BaseSettings):
     # Voyage AI (Embeddings)
     voyage_api_key: Optional[str] = Field(default=None)
 
+    # Firecrawl (Web Scraping)
+    firecrawl_api_key: Optional[str] = Field(default=None)
+
     # Neo4j Knowledge Graph
     neo4j_uri: str = Field(default="bolt://localhost:7687")
     neo4j_user: str = Field(default="neo4j")
