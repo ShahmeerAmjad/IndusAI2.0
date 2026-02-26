@@ -442,6 +442,83 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Seller / Supply Side
+CREATE TABLE IF NOT EXISTS seller_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID REFERENCES organizations(id),
+    name TEXT NOT NULL,
+    website TEXT,
+    catalog_source TEXT DEFAULT 'manual',
+    last_scraped_at TIMESTAMPTZ,
+    reliability_base REAL DEFAULT 5.0,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS seller_warehouses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id UUID NOT NULL REFERENCES seller_profiles(id) ON DELETE CASCADE,
+    location_id UUID NOT NULL REFERENCES locations(id),
+    ships_to_regions TEXT[] DEFAULT '{"US"}',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS seller_listings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id UUID NOT NULL REFERENCES seller_profiles(id) ON DELETE CASCADE,
+    sku TEXT NOT NULL,
+    part_sku TEXT NOT NULL,
+    price NUMERIC(12,2) NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    qty_available INTEGER DEFAULT 0,
+    warehouse_id UUID REFERENCES seller_warehouses(id),
+    lead_time_days INTEGER DEFAULT 3,
+    reliability REAL DEFAULT 5.0,
+    source_type TEXT DEFAULT 'manual',
+    last_verified_at TIMESTAMPTZ DEFAULT now(),
+    stale_after TIMESTAMPTZ DEFAULT (now() + interval '7 days'),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(seller_id, sku, warehouse_id)
+);
+
+-- Sourcing & RFQ
+CREATE TABLE IF NOT EXISTS sourcing_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_org_id UUID REFERENCES organizations(id),
+    user_id UUID REFERENCES users(id),
+    query_text TEXT NOT NULL,
+    intent TEXT,
+    results_json JSONB,
+    location_id UUID REFERENCES locations(id),
+    parts_found INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS rfq_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_org_id UUID REFERENCES organizations(id),
+    user_id UUID REFERENCES users(id),
+    part_description TEXT NOT NULL,
+    part_sku TEXT,
+    qty INTEGER NOT NULL DEFAULT 1,
+    urgency TEXT DEFAULT 'standard',
+    target_price NUMERIC(12,2),
+    status TEXT DEFAULT 'open',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS rfq_responses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    rfq_id UUID NOT NULL REFERENCES rfq_requests(id) ON DELETE CASCADE,
+    seller_id UUID NOT NULL REFERENCES seller_profiles(id),
+    price NUMERIC(12,2) NOT NULL,
+    lead_time_days INTEGER,
+    notes TEXT,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 """
 
 PLATFORM_INDEXES = """
@@ -518,4 +595,12 @@ CREATE INDEX IF NOT EXISTS idx_users_org ON users(org_id);
 CREATE INDEX IF NOT EXISTS idx_locations_org ON locations(org_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
+
+-- Sellers
+CREATE INDEX IF NOT EXISTS idx_seller_listings_part ON seller_listings(part_sku);
+CREATE INDEX IF NOT EXISTS idx_seller_listings_seller ON seller_listings(seller_id);
+CREATE INDEX IF NOT EXISTS idx_seller_listings_stale ON seller_listings(stale_after);
+CREATE INDEX IF NOT EXISTS idx_sourcing_requests_org ON sourcing_requests(buyer_org_id);
+CREATE INDEX IF NOT EXISTS idx_rfq_requests_org ON rfq_requests(buyer_org_id);
+CREATE INDEX IF NOT EXISTS idx_rfq_responses_rfq ON rfq_responses(rfq_id);
 """
