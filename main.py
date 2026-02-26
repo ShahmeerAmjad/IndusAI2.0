@@ -58,6 +58,16 @@ from services.escalation_service import EscalationService
 from services.intent_classifier import IntentClassifier
 from services.spam_detector import spam_detector
 
+# Knowledge Graph & AI (v3)
+from services.graph.neo4j_client import Neo4jClient
+from services.graph.graph_service import GraphService
+from services.ai.claude_client import ClaudeClient
+from services.ai.embedding_client import VoyageEmbeddingClient
+from services.ai.llm_router import LLMRouter
+from services.ai.part_number_parser import PartNumberParser
+from services.ai.entity_extractor import EntityExtractor
+from services.graphrag.query_engine import GraphRAGQueryEngine
+
 # Platform services
 from services.platform.erp_connector import MockERPConnector
 from services.platform.workflow_engine import WorkflowEngine
@@ -72,6 +82,8 @@ from services.platform.invoice_service import InvoiceService
 from services.platform.rma_service import RMAService
 from services.platform.analytics_service import AnalyticsService
 from routes.platform import router as platform_router, set_services
+from routes.auth import router as auth_router, set_auth_service, get_current_user
+from services.auth_service import AuthService
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -139,11 +151,19 @@ class Settings(BaseSettings):
     whatsapp_webhook_verify_token: Optional[str] = Field(default=None)
     whatsapp_app_secret: Optional[str] = Field(default=None)
 
-    # Anthropic AI
+    # Anthropic AI (Claude)
     anthropic_api_key: Optional[str] = Field(default=None)
-    ai_model: str = Field(default="claude-3-5-sonnet-20241022")
+    ai_model: str = Field(default="claude-sonnet-4-6-20250514")
     ai_max_retries: int = Field(default=3)
     ai_retry_delay: float = Field(default=1.0)
+
+    # Voyage AI (Embeddings)
+    voyage_api_key: Optional[str] = Field(default=None)
+
+    # Neo4j Knowledge Graph
+    neo4j_uri: str = Field(default="bolt://localhost:7687")
+    neo4j_user: str = Field(default="neo4j")
+    neo4j_password: str = Field(default="changeme")
 
     # Support contact info
     support_email: str = Field(default="support@company.com")
@@ -234,6 +254,8 @@ def _verify_whatsapp_signature(request_body: bytes, signature: str) -> bool:
 
 db_manager = DatabaseManager(logger=logger, settings=settings)
 classifier = IntentClassifier()
+part_parser = PartNumberParser()
+entity_extractor = EntityExtractor()
 ai_service = AIService(logger=logger, settings=settings)
 escalation_service = EscalationService(settings=settings, logger=logger, db_manager=db_manager)
 comm_manager = CommunicationManager(logger=logger, settings=settings)
@@ -241,7 +263,7 @@ comm_manager = CommunicationManager(logger=logger, settings=settings)
 # Platform services — initialised after DB pool is ready (see lifespan)
 erp_connector = MockERPConnector()
 workflow_engine = WorkflowEngine(db_manager, logger)
-product_service = ProductService(db_manager, logger)
+product_service = ProductService(db_manager, erp_connector, logger)
 inventory_service = InventoryService(db_manager, logger)
 customer_service = CustomerService(db_manager, logger)
 pricing_service = PricingService(db_manager, logger)
@@ -288,6 +310,52 @@ async def lifespan(app: FastAPI):
 
     await db_manager.initialize()
 
+    # Initialize Neo4j Knowledge Graph
+    neo4j_client = None
+    try:
+        from services.graph.schema import create_schema
+
+        neo4j_client = Neo4jClient(
+            uri=settings.neo4j_uri,
+            user=settings.neo4j_user,
+            password=settings.neo4j_password,
+        )
+        await neo4j_client.connect()
+        await create_schema(neo4j_client)
+        graph_service = GraphService(neo4j_client)
+        logger.info("Neo4j knowledge graph ready")
+
+        # Initialize LLM Router (Claude + Voyage AI)
+        claude_client = ClaudeClient(api_key=settings.anthropic_api_key)
+        embedding_client = VoyageEmbeddingClient(api_key=settings.voyage_api_key)
+        llm_router = LLMRouter(claude_client=claude_client, embedding_client=embedding_client)
+
+        # Wire intent classifier with LLM router
+        classifier._llm = llm_router
+
+        # Initialize GraphRAG Query Engine
+        query_engine = GraphRAGQueryEngine(
+            graph_service=graph_service,
+            llm_router=llm_router,
+            intent_classifier=classifier,
+            entity_extractor=entity_extractor,
+            part_parser=part_parser,
+        )
+
+        # Store on app state for endpoint access
+        app.state.neo4j_client = neo4j_client
+        app.state.graph_service = graph_service
+        app.state.query_engine = query_engine
+        app.state.llm_router = llm_router
+        logger.info("GraphRAG query engine ready")
+
+    except Exception as e:
+        logger.warning("Knowledge graph initialization failed (non-fatal): %s", e)
+        app.state.neo4j_client = None
+        app.state.graph_service = None
+        app.state.query_engine = None
+        app.state.llm_router = None
+
     # Create platform tables & indexes
     if db_manager.pool:
         try:
@@ -298,6 +366,11 @@ async def lifespan(app: FastAPI):
             logger.info("Platform schema ready")
         except Exception as e:
             logger.error(f"Platform schema creation failed: {e}")
+
+    # Initialize auth service
+    auth_service = AuthService(db_manager=db_manager, settings=settings)
+    set_auth_service(auth_service)
+    app.state.auth_service = auth_service
 
     # Inject services into the platform API router
     set_services({
@@ -326,6 +399,15 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Seed failed: {e}")
 
+    # Seed Neo4j demo data in debug mode
+    if settings.debug and neo4j_client:
+        try:
+            from services.graph.seed_demo import seed_graph
+            await seed_graph(app.state.graph_service)
+            logger.info("Neo4j demo data seeded")
+        except Exception as e:
+            logger.error("Neo4j seed failed: %s", e)
+
     if settings.debug:
         token = create_admin_token("admin")
         logger.info(f"Dev admin token: {token}")
@@ -333,6 +415,13 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info(f"Shutting down {settings.app_name}")
+    # Close Neo4j connection
+    if neo4j_client:
+        try:
+            await neo4j_client.close()
+            logger.info("Neo4j connection closed")
+        except Exception as e:
+            logger.warning("Neo4j cleanup failed: %s", e)
     await db_manager.close()
     await comm_manager.close()
 
@@ -346,6 +435,7 @@ app = FastAPI(
 
 # Platform API routes
 app.include_router(platform_router)
+app.include_router(auth_router)
 
 # Rate limiter
 app.state.limiter = limiter
@@ -395,8 +485,10 @@ async def health_check():
 async def detailed_health_check():
     db_healthy = False
     redis_healthy = False
+    neo4j_healthy = False
     db_error = None
     redis_error = None
+    neo4j_error = None
 
     if db_manager.pool:
         try:
@@ -412,6 +504,22 @@ async def detailed_health_check():
             redis_healthy = True
         except Exception as e:
             redis_error = str(e)
+
+    neo4j_client = getattr(app.state, "neo4j_client", None)
+    if neo4j_client:
+        try:
+            neo4j_healthy = await neo4j_client.health_check()
+        except Exception as e:
+            neo4j_error = str(e)
+
+    # Neo4j graph stats (if available)
+    graph_stats = None
+    graph_service = getattr(app.state, "graph_service", None)
+    if graph_service and neo4j_healthy:
+        try:
+            graph_stats = await graph_service.get_graph_stats()
+        except Exception:
+            pass
 
     return {
         "status": "healthy" if (db_healthy or not db_manager.pool) else "degraded",
@@ -429,10 +537,19 @@ async def detailed_health_check():
                 "healthy": redis_healthy,
                 "error": redis_error,
             },
+            "neo4j": {
+                "connected": neo4j_client is not None,
+                "healthy": neo4j_healthy,
+                "graph_stats": graph_stats,
+                "error": neo4j_error,
+            },
             "whatsapp": {"configured": bool(settings.whatsapp_access_token)},
             "ai": {
                 "available": ai_service.client is not None,
                 "circuit_breaker": ai_service.get_circuit_breaker_state(),
+            },
+            "graphrag": {
+                "available": getattr(app.state, "query_engine", None) is not None,
             },
         },
         "metrics": {
@@ -471,6 +588,7 @@ async def root():
             "RMA / Returns Processing",
             "Workflow Approvals Engine",
             "Analytics & Dashboard Metrics",
+            "Knowledge Graph Intelligence (Neo4j GraphRAG)",
             "AI-enhanced Conversational Interface (Claude)",
             "WhatsApp Business Integration",
             "Prometheus Metrics & Admin Dashboard",
