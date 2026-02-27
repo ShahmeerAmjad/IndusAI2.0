@@ -519,6 +519,21 @@ CREATE TABLE IF NOT EXISTS rfq_responses (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Sourcing Orders (from chat)
+CREATE TABLE IF NOT EXISTS sourcing_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_org_id UUID REFERENCES organizations(id),
+    user_id UUID REFERENCES users(id),
+    seller_name TEXT NOT NULL,
+    sku TEXT NOT NULL,
+    qty INTEGER NOT NULL,
+    unit_price NUMERIC(12,2) NOT NULL,
+    total NUMERIC(12,2) NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 """
 
 PLATFORM_INDEXES = """
@@ -603,4 +618,6 @@ CREATE INDEX IF NOT EXISTS idx_seller_listings_stale ON seller_listings(stale_af
 CREATE INDEX IF NOT EXISTS idx_sourcing_requests_org ON sourcing_requests(buyer_org_id);
 CREATE INDEX IF NOT EXISTS idx_rfq_requests_org ON rfq_requests(buyer_org_id);
 CREATE INDEX IF NOT EXISTS idx_rfq_responses_rfq ON rfq_responses(rfq_id);
+CREATE INDEX IF NOT EXISTS idx_sourcing_orders_org ON sourcing_orders(buyer_org_id);
+CREATE INDEX IF NOT EXISTS idx_sourcing_orders_user ON sourcing_orders(user_id);
 """
