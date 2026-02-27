@@ -13,6 +13,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/rma": "Returns & RMA",
   "/channels": "Omnichannel Hub",
   "/chat": "AI Sourcing Assistant",
+  "/admin": "Admin Debug View",
 };
 
 export default function Header() {

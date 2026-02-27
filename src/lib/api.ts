@@ -369,4 +369,11 @@ export const api = {
     get<PaginatedResponse<ChannelMessage>>(`/channels/messages?page=${page}&page_size=20${channel ? `&channel=${channel}` : ""}`),
   getEscalations: (page = 1, status = "") =>
     get<PaginatedResponse<EscalationTicket>>(`/channels/escalations?page=${page}&page_size=20${status ? `&status=${status}` : ""}`),
+
+  // Admin
+  adminGraphStats: () => authRequest<unknown>("/admin/graph/stats"),
+  adminSellerFreshness: () => authRequest<unknown>("/admin/sellers/freshness"),
+  adminRecentSourcing: () => authRequest<unknown>("/admin/sourcing/recent"),
+  adminReliabilityScores: () => authRequest<unknown>("/admin/reliability/scores"),
+  adminRecentOrders: () => authRequest<unknown>("/admin/orders/recent"),
 };

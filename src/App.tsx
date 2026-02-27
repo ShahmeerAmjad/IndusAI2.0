@@ -18,6 +18,7 @@ const Channels = lazy(() => import("@/pages/Channels"));
 const Chat = lazy(() => import("@/pages/Chat"));
 const Login = lazy(() => import("@/pages/Login"));
 const Signup = lazy(() => import("@/pages/Signup"));
+const AdminDebug = lazy(() => import("@/pages/AdminDebug"));
 
 function PageLoader() {
   return (
@@ -79,6 +80,7 @@ export default function App() {
               <Route path="/rma" element={<Suspense fallback={<PageLoader />}><RMA /></Suspense>} />
               <Route path="/channels" element={<Suspense fallback={<PageLoader />}><Channels /></Suspense>} />
               <Route path="/chat" element={<Suspense fallback={<PageLoader />}><Chat /></Suspense>} />
+              <Route path="/admin" element={<Suspense fallback={<PageLoader />}><AdminDebug /></Suspense>} />
             </Route>
           </Route>
 
