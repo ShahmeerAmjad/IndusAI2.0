@@ -11,10 +11,11 @@ from typing import Any, Dict, List, Optional, Tuple
 class ProductService:
     """Manages the product catalog — CRUD, search, specs, cross-references."""
 
-    def __init__(self, db_manager, erp_connector, logger):
+    def __init__(self, db_manager, erp_connector, logger, graph_sync=None):
         self.db = db_manager
         self.erp = erp_connector
         self.logger = logger
+        self._graph_sync = graph_sync
 
     # ------------------------------------------------------------------
     # CRUD
@@ -42,7 +43,13 @@ class ProductService:
                     data.get("min_order_qty", 1), data.get("lead_time_days"),
                     data.get("hazmat", False), data.get("country_of_origin"),
                 )
-            return await self.get_product(product_id)
+            product = await self.get_product(product_id)
+            if self._graph_sync and product:
+                try:
+                    await self._graph_sync.sync_product(product)
+                except Exception as sync_err:
+                    self.logger.warning("Graph sync failed for new product: %s", sync_err)
+            return product
         except Exception as e:
             self.logger.error(f"Failed to create product: {e}")
             return None
@@ -137,7 +144,13 @@ class ProductService:
         try:
             async with self.db.pool.acquire() as conn:
                 await conn.execute(query, *values)
-            return await self.get_product(product_id)
+            product = await self.get_product(product_id)
+            if self._graph_sync and product:
+                try:
+                    await self._graph_sync.sync_product(product)
+                except Exception as sync_err:
+                    self.logger.warning("Graph sync failed for updated product: %s", sync_err)
+            return product
         except Exception as e:
             self.logger.error(f"Failed to update product: {e}")
             return None

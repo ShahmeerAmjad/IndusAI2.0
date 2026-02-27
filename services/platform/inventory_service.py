@@ -11,9 +11,10 @@ from typing import Any, Dict, List, Optional
 class InventoryService:
     """Manages inventory: stock levels, reservations, adjustments, transfers, reorder alerts."""
 
-    def __init__(self, db_manager, logger):
+    def __init__(self, db_manager, logger, graph_sync=None):
         self.db = db_manager
         self.logger = logger
+        self._graph_sync = graph_sync
 
     # ------------------------------------------------------------------
     # Stock Queries
@@ -156,6 +157,16 @@ class InventoryService:
                         conn, product_id, warehouse_code,
                         "adjustment", qty, "adjustment", None, reason, created_by,
                     )
+            if self._graph_sync:
+                try:
+                    stock = await self.get_stock(product_id, warehouse_code)
+                    if stock:
+                        await self._graph_sync.sync_inventory(
+                            stock["sku"], warehouse_code,
+                            int(stock.get("quantity_on_hand", 0)),
+                        )
+                except Exception as sync_err:
+                    self.logger.warning("Graph sync failed for inventory: %s", sync_err)
             return True
         except Exception as e:
             self.logger.error(f"Stock adjustment failed: {e}")
@@ -292,6 +303,16 @@ class InventoryService:
                         "receipt", qty, "po", po_id,
                         f"Received from PO {po_id}", "system",
                     )
+            if self._graph_sync:
+                try:
+                    stock = await self.get_stock(product_id, warehouse_code)
+                    if stock:
+                        await self._graph_sync.sync_inventory(
+                            stock["sku"], warehouse_code,
+                            int(stock.get("quantity_on_hand", 0)),
+                        )
+                except Exception as sync_err:
+                    self.logger.warning("Graph sync failed for received stock: %s", sync_err)
             return True
         except Exception as e:
             self.logger.error(f"Receive stock failed: {e}")

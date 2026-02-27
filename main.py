@@ -364,6 +364,18 @@ async def lifespan(app: FastAPI):
         # Wire sourcing API routes
         set_sourcing_services(query_engine, seller_service, db_manager)
 
+        # Create sync service
+        from services.graph.sync import GraphSyncService
+        graph_sync = GraphSyncService(
+            graph_service=graph_service,
+            embedding_client=embedding_client,
+        )
+        app.state.graph_sync = graph_sync
+
+        # Inject into platform services
+        product_service._graph_sync = graph_sync
+        inventory_service._graph_sync = graph_sync
+
         # Store on app state for endpoint access
         app.state.neo4j_client = neo4j_client
         app.state.graph_service = graph_service
@@ -449,6 +461,16 @@ async def lifespan(app: FastAPI):
             logger.info("Neo4j demo data seeded")
         except Exception as e:
             logger.error("Neo4j seed failed: %s", e)
+
+    # Bulk sync PG products to Neo4j
+    if neo4j_client and db_manager.pool:
+        try:
+            sync = getattr(app.state, "graph_sync", None)
+            if sync:
+                stats = await sync.bulk_sync_products(db_manager)
+                logger.info("Bulk PG→Neo4j sync: %s", stats)
+        except Exception as e:
+            logger.warning("Bulk sync failed: %s", e)
 
     if settings.debug:
         token = create_admin_token("admin")
