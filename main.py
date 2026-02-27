@@ -86,6 +86,7 @@ from routes.auth import router as auth_router, set_auth_service, get_current_use
 from services.auth_service import AuthService
 from routes.sourcing import router as sourcing_router, set_sourcing_services
 from routes.rfq import router as rfq_router, set_rfq_db
+from routes.graph import router as graph_router, set_graph_services
 from services.seller_service import SellerService
 from services.intelligence.location import LocationOptimizer
 from services.intelligence.price_comparator import PriceComparator
@@ -364,6 +365,9 @@ async def lifespan(app: FastAPI):
         # Wire sourcing API routes
         set_sourcing_services(query_engine, seller_service, db_manager)
 
+        # Wire GraphRAG into chat pipeline
+        business_logic.query_engine = query_engine
+
         # Create sync service
         from services.graph.sync import GraphSyncService
         graph_sync = GraphSyncService(
@@ -375,6 +379,9 @@ async def lifespan(app: FastAPI):
         # Inject into platform services
         product_service._graph_sync = graph_sync
         inventory_service._graph_sync = graph_sync
+
+        # Wire graph API routes
+        set_graph_services(graph_service, graph_sync)
 
         # Store on app state for endpoint access
         app.state.neo4j_client = neo4j_client
@@ -507,6 +514,7 @@ app.include_router(platform_router)
 app.include_router(auth_router)
 app.include_router(sourcing_router)
 app.include_router(rfq_router)
+app.include_router(graph_router)
 
 # Rate limiter
 app.state.limiter = limiter

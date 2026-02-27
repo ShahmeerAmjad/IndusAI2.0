@@ -7,17 +7,21 @@ Now backed by real platform services (product catalog, inventory,
 pricing, orders, quotes, RMA) instead of hardcoded responses.
 """
 
+import logging
 import re
 from typing import Any, Dict, Optional
 
 from models.models import BotResponse, CustomerMessage, MessageType
+
+logger = logging.getLogger(__name__)
 
 
 class BusinessLogic:
     def __init__(self, ai_service, db_manager, settings, escalation_service,
                  product_service=None, inventory_service=None,
                  pricing_service=None, order_service=None,
-                 quote_service=None, customer_service=None, rma_service=None):
+                 quote_service=None, customer_service=None, rma_service=None,
+                 query_engine=None):
         self.ai_service = ai_service
         self.db_manager = db_manager
         self.settings = settings
@@ -30,6 +34,7 @@ class BusinessLogic:
         self.quotes = quote_service
         self.customers = customer_service
         self.rma = rma_service
+        self.query_engine = query_engine
 
     async def process_message(self, message: CustomerMessage) -> BotResponse:
         """Route a classified message to the appropriate handler and return a response."""
@@ -141,6 +146,19 @@ class BusinessLogic:
         )
 
     async def _handle_product_inquiry(self, message: CustomerMessage, context: Dict) -> BotResponse:
+        # Try GraphRAG first if available
+        if self.query_engine:
+            try:
+                result = await self.query_engine.process_query(message.content)
+                if result.parts_found > 0:
+                    return BotResponse(
+                        content=result.response,
+                        suggested_actions=["Get quote", "Check availability", "View cross-references"],
+                        metadata={"graph_paths": result.graph_paths, "parts_found": result.parts_found},
+                    )
+            except Exception as e:
+                logger.warning("GraphRAG product inquiry failed, falling back: %s", e)
+
         product_match = re.search(
             r'(?:product|item|sku|part|model)\s*[\-#]?\s*([A-Z0-9\-]+)', message.content, re.I
         )
@@ -337,6 +355,18 @@ class BusinessLogic:
             )
             escalate = True
         else:
+            # Try GraphRAG for technical spec questions
+            if self.query_engine:
+                try:
+                    result = await self.query_engine.process_query(message.content)
+                    if result.parts_found > 0:
+                        return BotResponse(
+                            content=result.response,
+                            suggested_actions=["View specs", "Find alternatives", "Contact engineer"],
+                        )
+                except Exception:
+                    pass  # Fall through to existing handlers
+
             mro_match = re.search(r'(MRO-[A-Z0-9\-]+)', message.content, re.I)
             product_context = ""
             if mro_match and self.products:
