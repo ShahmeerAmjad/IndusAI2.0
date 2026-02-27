@@ -306,12 +306,12 @@ ASSEMBLIES = [
 ]
 
 
-async def seed_graph(graph_service) -> dict:
+async def seed_graph(graph_service, embedding_client=None) -> dict:
     """Seed the Neo4j knowledge graph with demo MRO data.
 
     Returns a summary dict with counts of created entities.
     """
-    stats = {"parts": 0, "cross_refs": 0, "assemblies": 0, "components": 0}
+    stats = {"parts": 0, "cross_refs": 0, "assemblies": 0, "components": 0, "embeddings": 0}
 
     all_parts = BEARINGS + FASTENERS + BELTS + SEALS_AND_MISC
 
@@ -336,6 +336,38 @@ async def seed_graph(graph_service) -> dict:
             stats["parts"] += 1
         except Exception as e:
             logger.warning("Failed to seed part %s: %s", part_data.get("sku"), e)
+
+    # Generate and store embeddings in batches
+    if embedding_client:
+        try:
+            batch_size = 20
+            for i in range(0, len(all_parts), batch_size):
+                batch = all_parts[i:i + batch_size]
+                embed_inputs = []
+                for p in batch:
+                    embed_inputs.append({
+                        "sku": p["sku"],
+                        "name": p.get("name", ""),
+                        "manufacturer": p.get("manufacturer", ""),
+                        "category": p.get("category", ""),
+                        "description": p.get("description", ""),
+                        "specs": {s["name"]: s["value"] for s in p.get("specs", [])},
+                    })
+
+                embeddings = await embedding_client.embed_parts(embed_inputs)
+                for part_data, embedding in zip(batch, embeddings):
+                    try:
+                        await graph_service._db.execute_write(
+                            "MATCH (p:Part {sku: $sku}) SET p.embedding = $embedding",
+                            {"sku": part_data["sku"], "embedding": embedding},
+                        )
+                        stats["embeddings"] += 1
+                    except Exception as e:
+                        logger.warning("Failed to store embedding for %s: %s", part_data["sku"], e)
+
+            logger.info("Generated embeddings for %d parts", stats["embeddings"])
+        except Exception as e:
+            logger.warning("Embedding generation failed (non-fatal): %s", e)
 
     # Add cross-references
     for sku_a, sku_b, rel_type in CROSS_REFERENCES:

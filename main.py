@@ -464,8 +464,10 @@ async def lifespan(app: FastAPI):
     if settings.debug and neo4j_client:
         try:
             from services.graph.seed_demo import seed_graph
-            await seed_graph(app.state.graph_service)
-            logger.info("Neo4j demo data seeded")
+            embed_client = getattr(app.state, "llm_router", None)
+            embed_client = embed_client._embeddings if embed_client else None
+            stats = await seed_graph(app.state.graph_service, embedding_client=embed_client)
+            logger.info("Neo4j demo data seeded: %s", stats)
         except Exception as e:
             logger.error("Neo4j seed failed: %s", e)
 
