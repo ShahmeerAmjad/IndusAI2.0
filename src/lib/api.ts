@@ -234,6 +234,48 @@ export interface EscalationTicket {
   updated_at: string;
 }
 
+export interface SourcingResult {
+  sku: string;
+  name: string;
+  seller_name: string;
+  unit_price: number;
+  total_cost: number;
+  transit_days: number;
+  shipping_cost: number;
+  distance_km: number;
+  qty_available: number;
+  manufacturer: string;
+}
+
+export interface SourcingResponse {
+  response: string;
+  parts_found: number;
+  intent: string | null;
+  sourcing_results: SourcingResult[];
+}
+
+export interface GraphPart {
+  sku: string;
+  name: string;
+  manufacturer?: string;
+  category?: string;
+  description?: string;
+  specs?: Array<{ name: string; value: string | number; unit?: string }>;
+  cross_refs?: Array<{ sku: string; name?: string; type: string }>;
+  compatible_parts?: Array<{ sku: string; name?: string; manufacturer?: string; context?: string }>;
+}
+
+export interface GraphSearchResult {
+  results: Array<{ node: GraphPart; score: number }>;
+  total: number;
+  query: string;
+}
+
+export interface GraphStats {
+  nodes: Record<string, number>;
+  edges: Record<string, number>;
+}
+
 // ---------- API Functions ----------
 
 export const api = {
@@ -299,4 +341,20 @@ export const api = {
     get<PaginatedResponse<ChannelMessage>>(`/channels/messages?page=${page}&page_size=20${channel ? `&channel=${channel}` : ""}`),
   getEscalations: (page = 1, status = "") =>
     get<PaginatedResponse<EscalationTicket>>(`/channels/escalations?page=${page}&page_size=20${status ? `&status=${status}` : ""}`),
+
+  // Sourcing (AI-powered)
+  searchSourcing: (query: string, qty = 1) =>
+    fetch("/api/sourcing/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, qty }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`Sourcing search failed: ${r.status}`);
+      return r.json() as Promise<SourcingResponse>;
+    }),
+
+  // Knowledge Graph
+  getGraphPart: (sku: string) => get<GraphPart>(`/graph/parts/${sku}`),
+  searchGraph: (q: string, limit = 20) => get<GraphSearchResult>(`/graph/parts/search/fulltext?q=${encodeURIComponent(q)}&limit=${limit}`),
+  getGraphStats: () => get<GraphStats>("/graph/stats"),
 };

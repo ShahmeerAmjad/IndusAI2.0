@@ -15,6 +15,7 @@ const Invoices = lazy(() => import("@/pages/Invoices"));
 const RMA = lazy(() => import("@/pages/RMA"));
 const Channels = lazy(() => import("@/pages/Channels"));
 const Chat = lazy(() => import("@/pages/Chat"));
+const Sourcing = lazy(() => import("@/pages/Sourcing"));
 
 function PageLoader() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/rma" element={<Suspense fallback={<PageLoader />}><RMA /></Suspense>} />
           <Route path="/channels" element={<Suspense fallback={<PageLoader />}><Channels /></Suspense>} />
           <Route path="/chat" element={<Suspense fallback={<PageLoader />}><Chat /></Suspense>} />
+          <Route path="/sourcing" element={<Suspense fallback={<PageLoader />}><Sourcing /></Suspense>} />
         </Route>
       </Routes>
       <Toaster position="top-right" richColors />
