@@ -2,16 +2,45 @@
 # Intent Classification - Pattern + Fuzzy Matching
 # =======================
 
+import json
 import re
-from typing import Tuple
+import logging
+from typing import Optional, Tuple
 
 from fuzzywuzzy import fuzz
 
 from models.models import MessageType
+from services.ai.models import IntentType, IntentResult
+
+logger = logging.getLogger(__name__)
+
+# Mapping from the new IntentType enum to the legacy MessageType enum
+INTENT_TO_MESSAGE_TYPE: dict[IntentType, MessageType] = {
+    IntentType.ORDER_STATUS: MessageType.ORDER_STATUS,
+    IntentType.PART_LOOKUP: MessageType.PRODUCT_INQUIRY,
+    IntentType.INVENTORY_CHECK: MessageType.PRODUCT_INQUIRY,
+    IntentType.QUOTE_REQUEST: MessageType.PRICE_REQUEST,
+    IntentType.TECHNICAL_SUPPORT: MessageType.TECHNICAL_SUPPORT,
+    IntentType.ACCOUNT_INQUIRY: MessageType.GENERAL_QUERY,
+    IntentType.RETURN_REQUEST: MessageType.RETURNS,
+    IntentType.GENERAL_QUERY: MessageType.GENERAL_QUERY,
+}
+
+# Reverse mapping: MessageType → IntentType (best-fit)
+_MESSAGE_TYPE_TO_INTENT: dict[MessageType, IntentType] = {
+    MessageType.ORDER_STATUS: IntentType.ORDER_STATUS,
+    MessageType.PRODUCT_INQUIRY: IntentType.PART_LOOKUP,
+    MessageType.PRICE_REQUEST: IntentType.QUOTE_REQUEST,
+    MessageType.TECHNICAL_SUPPORT: IntentType.TECHNICAL_SUPPORT,
+    MessageType.RETURNS: IntentType.RETURN_REQUEST,
+    MessageType.GENERAL_QUERY: IntentType.GENERAL_QUERY,
+    MessageType.UNKNOWN: IntentType.GENERAL_QUERY,
+}
 
 
 class IntentClassifier:
-    def __init__(self):
+    def __init__(self, llm_router=None):
+        self._llm = llm_router
         self.patterns = {
             MessageType.ORDER_STATUS: [
                 r'(?:status|track|where).*(?:order|po|shipment|purchase)',
@@ -114,3 +143,35 @@ class IntentClassifier:
                     best_type = msg_type
 
         return best_type, best_score
+
+    # ---- New async intent API (IntentType-based) ----
+
+    async def classify_intent(self, text: str) -> IntentResult:
+        """Classify text and return an IntentResult using IntentType enum.
+
+        If an LLM router is available, tries LLM classification first.
+        Falls back to regex/fuzzy classification mapped to IntentType.
+        """
+        # Try LLM-based classification first
+        if self._llm is not None:
+            try:
+                prompt = (
+                    "Classify the user intent. Return JSON with keys: "
+                    '"intent" (one of: order_status, part_lookup, inventory_check, '
+                    "quote_request, technical_support, account_inquiry, return_request, "
+                    'general_query) and "confidence" (0-1 float). '
+                    f"User message: {text}"
+                )
+                raw = await self._llm.chat(prompt)
+                data = json.loads(raw)
+                return IntentResult(
+                    intent=IntentType(data["intent"]),
+                    confidence=float(data["confidence"]),
+                )
+            except Exception as exc:
+                logger.debug("LLM intent classification failed, falling back: %s", exc)
+
+        # Fallback: regex/fuzzy → MessageType → IntentType
+        msg_type, confidence = self.classify(text)
+        intent = _MESSAGE_TYPE_TO_INTENT.get(msg_type, IntentType.GENERAL_QUERY)
+        return IntentResult(intent=intent, confidence=confidence)
