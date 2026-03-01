@@ -20,6 +20,7 @@ const Sourcing = lazy(() => import("@/pages/Sourcing"));
 const Login = lazy(() => import("@/pages/Login"));
 const Signup = lazy(() => import("@/pages/Signup"));
 const AdminDebug = lazy(() => import("@/pages/AdminDebug"));
+const BulkImport = lazy(() => import("@/pages/BulkImport"));
 
 function PageLoader() {
   return (
@@ -82,6 +83,7 @@ export default function App() {
               <Route path="/channels" element={<Suspense fallback={<PageLoader />}><Channels /></Suspense>} />
               <Route path="/chat" element={<Suspense fallback={<PageLoader />}><Chat /></Suspense>} />
               <Route path="/sourcing" element={<Suspense fallback={<PageLoader />}><Sourcing /></Suspense>} />
+              <Route path="/bulk-import" element={<Suspense fallback={<PageLoader />}><BulkImport /></Suspense>} />
               <Route path="/admin" element={<Suspense fallback={<PageLoader />}><AdminDebug /></Suspense>} />
             </Route>
           </Route>

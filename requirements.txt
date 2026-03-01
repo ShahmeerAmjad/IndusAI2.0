@@ -28,6 +28,10 @@ neo4j>=5.20,<6.0
 
 # Embeddings (Voyage AI) — uses httpx REST calls, no SDK needed
 
+# Reports & Export
+openpyxl>=3.1,<4.0
+reportlab>=4.0,<5.0
+
 # Security & Auth
 PyJWT>=2.8,<3.0
 bcrypt>=4.0,<5.0

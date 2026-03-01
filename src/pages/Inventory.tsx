@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, InventoryItem, ReorderAlert } from "@/lib/api";
 import { formatNumber, cn } from "@/lib/utils";
 import { useState } from "react";
+import ReportDownloadButton from "@/components/ReportDownloadButton";
 
 type Tab = "stock" | "reorder";
 
@@ -38,13 +39,16 @@ export default function Inventory() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-montserrat font-bold text-neutral-900">
-          Inventory Management
-        </h1>
-        <p className="text-neutral-500 text-sm mt-1">
-          Monitor stock levels and reorder alerts across warehouses
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-montserrat font-bold text-neutral-900">
+            Inventory Management
+          </h1>
+          <p className="text-neutral-500 text-sm mt-1">
+            Monitor stock levels and reorder alerts across warehouses
+          </p>
+        </div>
+        <ReportDownloadButton endpoint="inventory" label="Export Inventory" />
       </div>
 
       {/* Tab Buttons */}

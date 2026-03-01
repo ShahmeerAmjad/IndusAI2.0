@@ -13,6 +13,7 @@ import {
   Radio,
   Search,
   Bug,
+  Upload,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -51,6 +52,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Admin",
     items: [
+      { to: "/bulk-import", label: "Bulk Import", icon: Upload },
       { to: "/admin", label: "Debug View", icon: Bug },
     ],
   },

@@ -89,6 +89,10 @@ from routes.sourcing import router as sourcing_router, set_sourcing_services
 from routes.rfq import router as rfq_router, set_rfq_db
 from routes.graph import router as graph_router, set_graph_services
 from routes.admin_graph import router as admin_router, set_admin_services
+from routes.reports import router as reports_router, set_report_service
+from routes.bulk import router as bulk_router, set_bulk_service
+from services.report_service import ReportService
+from services.bulk_import_service import BulkImportService
 from services.seller_service import SellerService
 from services.intelligence.location import LocationOptimizer
 from services.intelligence.price_comparator import PriceComparator
@@ -444,6 +448,10 @@ async def lifespan(app: FastAPI):
         db_manager=db_manager,
     )
 
+    # Wire report + bulk import services
+    set_report_service(ReportService(db_manager.pool))
+    set_bulk_service(BulkImportService(db_manager.pool))
+
     # Inject services into the platform API router
     set_services({
         "product_service": product_service,
@@ -537,6 +545,8 @@ app.include_router(sourcing_router)
 app.include_router(rfq_router)
 app.include_router(graph_router)
 app.include_router(admin_router)
+app.include_router(reports_router)
+app.include_router(bulk_router)
 
 # Rate limiter
 app.state.limiter = limiter

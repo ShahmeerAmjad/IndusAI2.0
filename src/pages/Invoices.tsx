@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, Invoice } from "@/lib/api";
 import { useState } from "react";
 import { formatCurrency, statusColor, cn } from "@/lib/utils";
+import ReportDownloadButton from "@/components/ReportDownloadButton";
 import {
   BarChart,
   Bar,
@@ -73,13 +74,16 @@ export default function Invoices() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Invoicing &amp; Payments
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Manage invoices, track payments, and review accounts receivable aging.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Invoicing &amp; Payments
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Manage invoices, track payments, and review accounts receivable aging.
+          </p>
+        </div>
+        <ReportDownloadButton endpoint="invoices" label="Export Invoices" />
       </div>
 
       {/* Tabs */}

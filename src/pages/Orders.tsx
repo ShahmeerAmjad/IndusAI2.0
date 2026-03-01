@@ -3,6 +3,7 @@ import { api, Order } from "@/lib/api";
 import { useState } from "react";
 import { formatCurrency, statusColor, cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import ReportDownloadButton from "@/components/ReportDownloadButton";
 
 const STATUSES = [
   "All",
@@ -37,6 +38,7 @@ export default function Orders() {
             Manage and track customer orders
           </p>
         </div>
+        <ReportDownloadButton endpoint="orders" label="Export Orders" />
       </div>
 
       {/* Status filter buttons */}
