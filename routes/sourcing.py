@@ -27,6 +27,13 @@ class SourcingQuery(BaseModel):
     debug: bool = False
 
 
+class SourcingOrderRequest(BaseModel):
+    seller_name: str = Field(min_length=1)
+    sku: str = Field(min_length=1)
+    qty: int = Field(ge=1)
+    unit_price: float = Field(gt=0)
+
+
 @router.post("/search")
 async def sourcing_search(req: SourcingQuery, user=Depends(get_current_user)):
     """AI-powered part sourcing search."""
@@ -83,3 +90,28 @@ async def sourcing_search(req: SourcingQuery, user=Depends(get_current_user)):
             pass  # Non-critical logging
 
     return response
+
+
+@router.post("/order")
+async def sourcing_order(req: SourcingOrderRequest, user=Depends(get_current_user)):
+    """Place an order from sourcing results."""
+    if not _db or not _db.pool:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    total = round(req.unit_price * req.qty, 2)
+
+    async with _db.pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO sourcing_orders
+               (buyer_org_id, user_id, seller_name, sku, qty, unit_price, total, status)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, 'confirmed')
+               RETURNING id, status""",
+            user.get("org_id"), user.get("user_id"),
+            req.seller_name, req.sku, req.qty, req.unit_price, total,
+        )
+
+    return {
+        "order_id": str(row["id"]),
+        "status": row["status"],
+        "message": f"Order confirmed — {req.qty}x {req.sku} from {req.seller_name} at ${total:.2f}",
+    }

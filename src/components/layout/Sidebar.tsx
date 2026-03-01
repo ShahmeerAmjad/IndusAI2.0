@@ -12,6 +12,7 @@ import {
   Bot,
   Radio,
   Search,
+  Bug,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -45,6 +46,12 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Intelligence",
     items: [
       { to: "/sourcing", label: "AI Sourcing", icon: Search },
+    ],
+  },
+  {
+    label: "Admin",
+    items: [
+      { to: "/admin", label: "Debug View", icon: Bug },
     ],
   },
 ];

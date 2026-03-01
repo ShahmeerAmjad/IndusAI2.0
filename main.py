@@ -87,6 +87,7 @@ from services.auth_service import AuthService
 from routes.sourcing import router as sourcing_router, set_sourcing_services
 from routes.rfq import router as rfq_router, set_rfq_db
 from routes.graph import router as graph_router, set_graph_services
+from routes.admin_graph import router as admin_router, set_admin_services
 from services.seller_service import SellerService
 from services.intelligence.location import LocationOptimizer
 from services.intelligence.price_comparator import PriceComparator
@@ -433,6 +434,12 @@ async def lifespan(app: FastAPI):
     # Wire RFQ routes
     set_rfq_db(db_manager)
 
+    # Wire admin debug routes
+    set_admin_services(
+        graph_service=getattr(app.state, "graph_service", None),
+        db_manager=db_manager,
+    )
+
     # Inject services into the platform API router
     set_services({
         "product_service": product_service,
@@ -459,6 +466,14 @@ async def lifespan(app: FastAPI):
             )
         except Exception as e:
             logger.error(f"Seed failed: {e}")
+
+    # Seed seller demo data in debug mode
+    if settings.debug and db_manager.pool:
+        try:
+            from services.platform.seed_sellers import seed_sellers
+            await seed_sellers(db_manager, logger)
+        except Exception as e:
+            logger.error("Seller seed failed: %s", e)
 
     # Seed Neo4j demo data in debug mode
     if settings.debug and neo4j_client:
@@ -517,6 +532,7 @@ app.include_router(auth_router)
 app.include_router(sourcing_router)
 app.include_router(rfq_router)
 app.include_router(graph_router)
+app.include_router(admin_router)
 
 # Rate limiter
 app.state.limiter = limiter

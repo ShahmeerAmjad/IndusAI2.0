@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import AppLayout from "@/components/layout/AppLayout";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
@@ -16,6 +17,9 @@ const RMA = lazy(() => import("@/pages/RMA"));
 const Channels = lazy(() => import("@/pages/Channels"));
 const Chat = lazy(() => import("@/pages/Chat"));
 const Sourcing = lazy(() => import("@/pages/Sourcing"));
+const Login = lazy(() => import("@/pages/Login"));
+const Signup = lazy(() => import("@/pages/Signup"));
+const AdminDebug = lazy(() => import("@/pages/AdminDebug"));
 
 function PageLoader() {
   return (
@@ -25,27 +29,68 @@ function PageLoader() {
   );
 }
 
+function FullPageLoader() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-slate-50">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-industrial-600" />
+    </div>
+  );
+}
+
+function RequireAuth() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return <FullPageLoader />;
+  if (!user) return <Navigate to="/login" replace />;
+
+  return <Outlet />;
+}
+
+function PublicOnly() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return <FullPageLoader />;
+  if (user) return <Navigate to="/" replace />;
+
+  return <Outlet />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
-          <Route path="/products" element={<Suspense fallback={<PageLoader />}><Products /></Suspense>} />
-          <Route path="/products/:id" element={<Suspense fallback={<PageLoader />}><ProductDetail /></Suspense>} />
-          <Route path="/inventory" element={<Suspense fallback={<PageLoader />}><Inventory /></Suspense>} />
-          <Route path="/orders" element={<Suspense fallback={<PageLoader />}><Orders /></Suspense>} />
-          <Route path="/orders/:id" element={<Suspense fallback={<PageLoader />}><OrderDetail /></Suspense>} />
-          <Route path="/quotes" element={<Suspense fallback={<PageLoader />}><Quotes /></Suspense>} />
-          <Route path="/procurement" element={<Suspense fallback={<PageLoader />}><Procurement /></Suspense>} />
-          <Route path="/invoices" element={<Suspense fallback={<PageLoader />}><Invoices /></Suspense>} />
-          <Route path="/rma" element={<Suspense fallback={<PageLoader />}><RMA /></Suspense>} />
-          <Route path="/channels" element={<Suspense fallback={<PageLoader />}><Channels /></Suspense>} />
-          <Route path="/chat" element={<Suspense fallback={<PageLoader />}><Chat /></Suspense>} />
-          <Route path="/sourcing" element={<Suspense fallback={<PageLoader />}><Sourcing /></Suspense>} />
-        </Route>
-      </Routes>
-      <Toaster position="top-right" richColors />
+      <AuthProvider>
+        <Routes>
+          {/* Public auth routes */}
+          <Route element={<PublicOnly />}>
+            <Route path="/login" element={<Suspense fallback={<FullPageLoader />}><Login /></Suspense>} />
+            <Route path="/signup" element={<Suspense fallback={<FullPageLoader />}><Signup /></Suspense>} />
+          </Route>
+
+          {/* Protected app routes */}
+          <Route element={<RequireAuth />}>
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
+              <Route path="/products" element={<Suspense fallback={<PageLoader />}><Products /></Suspense>} />
+              <Route path="/products/:id" element={<Suspense fallback={<PageLoader />}><ProductDetail /></Suspense>} />
+              <Route path="/inventory" element={<Suspense fallback={<PageLoader />}><Inventory /></Suspense>} />
+              <Route path="/orders" element={<Suspense fallback={<PageLoader />}><Orders /></Suspense>} />
+              <Route path="/orders/:id" element={<Suspense fallback={<PageLoader />}><OrderDetail /></Suspense>} />
+              <Route path="/quotes" element={<Suspense fallback={<PageLoader />}><Quotes /></Suspense>} />
+              <Route path="/procurement" element={<Suspense fallback={<PageLoader />}><Procurement /></Suspense>} />
+              <Route path="/invoices" element={<Suspense fallback={<PageLoader />}><Invoices /></Suspense>} />
+              <Route path="/rma" element={<Suspense fallback={<PageLoader />}><RMA /></Suspense>} />
+              <Route path="/channels" element={<Suspense fallback={<PageLoader />}><Channels /></Suspense>} />
+              <Route path="/chat" element={<Suspense fallback={<PageLoader />}><Chat /></Suspense>} />
+              <Route path="/sourcing" element={<Suspense fallback={<PageLoader />}><Sourcing /></Suspense>} />
+              <Route path="/admin" element={<Suspense fallback={<PageLoader />}><AdminDebug /></Suspense>} />
+            </Route>
+          </Route>
+
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <Toaster position="top-right" richColors />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

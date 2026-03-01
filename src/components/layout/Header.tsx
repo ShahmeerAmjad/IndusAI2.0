@@ -1,5 +1,6 @@
 import { useLocation } from "react-router-dom";
-import { Bell, User } from "lucide-react";
+import { Bell, LogOut, User } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
@@ -11,11 +12,13 @@ const PAGE_TITLES: Record<string, string> = {
   "/invoices": "Invoicing & Payments",
   "/rma": "Returns & RMA",
   "/channels": "Omnichannel Hub",
-  "/chat": "AI Assistant",
+  "/chat": "AI Sourcing Assistant",
+  "/admin": "Admin Debug View",
 };
 
 export default function Header() {
   const { pathname } = useLocation();
+  const { user, logout } = useAuth();
   const baseRoute = "/" + (pathname.split("/")[1] || "");
   const title = PAGE_TITLES[baseRoute] || "MRO Platform";
 
@@ -32,9 +35,24 @@ export default function Header() {
         <button className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
           <Bell className="h-4 w-4" />
         </button>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-500">
-          <User className="h-4 w-4" />
-        </div>
+        {user && (
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-industrial-100 text-industrial-700">
+              <User className="h-4 w-4" />
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-xs font-medium text-slate-700 leading-tight">{user.name}</p>
+              <p className="text-[10px] text-slate-400 leading-tight">{user.org_name}</p>
+            </div>
+            <button
+              onClick={logout}
+              title="Sign out"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

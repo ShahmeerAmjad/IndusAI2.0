@@ -1,8 +1,28 @@
 const API_BASE = "/api/v1";
+const AUTH_BASE = "/api";
+
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem("indusai_access_token");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
+    ...options,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${AUTH_BASE}${path}`, {
+    headers: authHeaders(),
     ...options,
   });
   if (!res.ok) {
@@ -242,7 +262,7 @@ export interface SourcingResult {
   total_cost: number;
   transit_days: number;
   shipping_cost: number;
-  distance_km: number;
+  distance_km: number | null;
   qty_available: number;
   manufacturer: string;
 }
@@ -274,6 +294,21 @@ export interface GraphSearchResult {
 export interface GraphStats {
   nodes: Record<string, number>;
   edges: Record<string, number>;
+}
+
+export interface SourcingOrderResponse {
+  order_id: string;
+  status: string;
+  message: string;
+}
+
+export interface Location {
+  id: string;
+  label: string;
+  city: string;
+  state: string;
+  lat: number | null;
+  lng: number | null;
 }
 
 // ---------- API Functions ----------
@@ -323,13 +358,28 @@ export const api = {
   // RMA
   getRMAs: (page = 1) => get<PaginatedResponse<RMA>>(`/rma?page=${page}&page_size=20`),
 
-  // Chat
+  // Chat (legacy)
   sendMessage: (content: string, from_id = "web_user") =>
     fetch("/api/v1/message", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({ from_id, content, channel: "web" }),
     }).then((r) => r.json() as Promise<ChatResponse>),
+
+  // Sourcing
+  sourcingSearch: (query: string, qty = 1, locationId?: string) =>
+    authRequest<SourcingResponse>("/sourcing/search", {
+      method: "POST",
+      body: JSON.stringify({ query, qty, location_id: locationId }),
+    }),
+  sourcingOrder: (data: { seller_name: string; sku: string; qty: number; unit_price: number }) =>
+    authRequest<SourcingOrderResponse>("/sourcing/order", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Auth (locations)
+  getLocations: () => authRequest<Location[]>("/auth/locations"),
 
   // Pricing
   getPrice: (productId: string, qty = 1) => get<unknown>(`/pricing/${productId}?quantity=${qty}`),
@@ -357,4 +407,11 @@ export const api = {
   getGraphPart: (sku: string) => get<GraphPart>(`/graph/parts/${sku}`),
   searchGraph: (q: string, limit = 20) => get<GraphSearchResult>(`/graph/parts/search/fulltext?q=${encodeURIComponent(q)}&limit=${limit}`),
   getGraphStats: () => get<GraphStats>("/graph/stats"),
+
+  // Admin
+  adminGraphStats: () => authRequest<unknown>("/admin/graph/stats"),
+  adminSellerFreshness: () => authRequest<unknown>("/admin/sellers/freshness"),
+  adminRecentSourcing: () => authRequest<unknown>("/admin/sourcing/recent"),
+  adminReliabilityScores: () => authRequest<unknown>("/admin/reliability/scores"),
+  adminRecentOrders: () => authRequest<unknown>("/admin/orders/recent"),
 };
