@@ -162,23 +162,17 @@ class AnalyticsService:
         if not self.db.pool:
             return []
 
-        trunc = {"day": "day", "week": "week", "month": "month"}.get(period, "month")
+        # Static SQL mapping — prevents SQL injection via period parameter
+        _TRUNC_SQL = {
+            "day": "SELECT date_trunc('day', order_date) as period, COUNT(*) as order_count, SUM(total_amount) as revenue, AVG(total_amount) as avg_order_value FROM orders WHERE status != 'cancelled' GROUP BY period ORDER BY period DESC LIMIT 24",
+            "week": "SELECT date_trunc('week', order_date) as period, COUNT(*) as order_count, SUM(total_amount) as revenue, AVG(total_amount) as avg_order_value FROM orders WHERE status != 'cancelled' GROUP BY period ORDER BY period DESC LIMIT 24",
+            "month": "SELECT date_trunc('month', order_date) as period, COUNT(*) as order_count, SUM(total_amount) as revenue, AVG(total_amount) as avg_order_value FROM orders WHERE status != 'cancelled' GROUP BY period ORDER BY period DESC LIMIT 24",
+        }
+        sql = _TRUNC_SQL.get(period, _TRUNC_SQL["month"])
 
         try:
             async with self.db.pool.acquire() as conn:
-                rows = await conn.fetch(
-                    f"""
-                    SELECT date_trunc('{trunc}', order_date) as period,
-                           COUNT(*) as order_count,
-                           SUM(total_amount) as revenue,
-                           AVG(total_amount) as avg_order_value
-                    FROM orders
-                    WHERE status != 'cancelled'
-                    GROUP BY period
-                    ORDER BY period DESC
-                    LIMIT 24
-                    """
-                )
+                rows = await conn.fetch(sql)
                 return [
                     {
                         "period": r["period"].isoformat() if r["period"] else None,
