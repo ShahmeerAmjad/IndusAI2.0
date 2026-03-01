@@ -65,8 +65,14 @@ class DatabaseManager:
                     timestamp TIMESTAMPTZ DEFAULT NOW(),
                     response_content TEXT,
                     response_time REAL,
+                    conversation_id UUID,
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )
+            """)
+
+            # Add conversation_id column if table already exists without it
+            await conn.execute("""
+                ALTER TABLE messages ADD COLUMN IF NOT EXISTS conversation_id UUID
             """)
 
             await conn.execute("""
@@ -103,6 +109,7 @@ class DatabaseManager:
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_external_id ON customers(external_id)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_escalation_customer ON escalation_tickets(customer_id)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_escalation_status ON escalation_tickets(status)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, timestamp ASC)")
 
     # ------ Message persistence ------
 

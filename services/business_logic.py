@@ -36,13 +36,15 @@ class BusinessLogic:
         self.rma = rma_service
         self.query_engine = query_engine
 
-    async def process_message(self, message: CustomerMessage) -> BotResponse:
+    async def process_message(self, message: CustomerMessage, conversation_history: list = None) -> BotResponse:
         """Route a classified message to the appropriate handler and return a response."""
 
         # Fetch or create session context
         session = await self.db_manager.get_customer_session(message.from_id)
         context = session or {"message_count": 0}
         context["message_count"] = context.get("message_count", 0) + 1
+        if conversation_history:
+            context["conversation_history"] = conversation_history
 
         # Ensure customer record exists
         if self.customers:

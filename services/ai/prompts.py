@@ -66,3 +66,15 @@ A buyer is looking for parts. You have searched our knowledge graph and seller c
 - If no results found, ask clarifying questions about what they need.
 - Do NOT show reliability scores or internal metadata to the buyer.
 """
+
+CONVERSATION_SUMMARY_PROMPT = """Summarize this MRO customer service conversation concisely.
+Focus on:
+- What products/parts the customer asked about (include SKUs, part numbers)
+- Key decisions made (orders placed, quotes requested)
+- Any unresolved questions or pending actions
+- Customer preferences (budget, delivery timeline, location)
+
+Keep the summary under 150 words. Be factual and specific.
+
+Conversation:
+{conversation_text}"""

@@ -54,6 +54,7 @@ class MessageRequest(BaseModel):
     from_id: str = Field(..., min_length=1, max_length=100, pattern=r'^[a-zA-Z0-9_\-@\+\.]+$')
     content: str = Field(..., min_length=1, max_length=2000)
     channel: str = Field(default="web", pattern='^(whatsapp|email|web|sms)$')
+    conversation_id: Optional[str] = Field(default=None, max_length=36)
 
     @field_validator('content')
     @classmethod

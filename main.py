@@ -52,6 +52,7 @@ from models.models import ChannelType, MessageRequest
 from services.ai_service import AIService
 from services.business_logic import BusinessLogic
 from services.chatbot_engine import ChatbotEngine
+from services.conversation_service import ConversationService
 from services.communication_manager import CommunicationManager
 from services.database_manager import DatabaseManager
 from services.escalation_service import EscalationService
@@ -301,12 +302,15 @@ business_logic = BusinessLogic(
     customer_service=customer_service,
     rma_service=rma_service,
 )
+conversation_service = ConversationService(db_manager)
 chatbot = ChatbotEngine(
     logger=logger,
     business_logic=business_logic,
     classifier=classifier,
     db_manager=db_manager,
     settings=settings,
+    conversation_service=conversation_service,
+    ai_service=ai_service,
 )
 
 # ---------------------------------------------------------------------------
@@ -845,10 +849,11 @@ async def _process_message(message_request: MessageRequest) -> dict:
         message_request.from_id,
         message_request.content,
         channel,
+        conversation_id=message_request.conversation_id,
     )
 
     if response:
-        return {
+        result = {
             "success": True,
             "response": {
                 "content": response.content,
@@ -857,6 +862,11 @@ async def _process_message(message_request: MessageRequest) -> dict:
             },
             "message_id": str(uuid.uuid4()),
         }
+        # Include conversation_id for multi-turn
+        conv_id = (response.metadata or {}).get("conversation_id")
+        if conv_id:
+            result["conversation_id"] = conv_id
+        return result
 
     return {"success": False, "error": "Failed to process message"}
 

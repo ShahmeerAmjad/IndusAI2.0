@@ -209,6 +209,7 @@ export interface ReorderAlert {
 
 export interface ChatResponse {
   success: boolean;
+  conversation_id?: string;
   response?: {
     content: string;
     suggested_actions: string[];
@@ -359,11 +360,11 @@ export const api = {
   getRMAs: (page = 1) => get<PaginatedResponse<RMA>>(`/rma?page=${page}&page_size=20`),
 
   // Chat (legacy)
-  sendMessage: (content: string, from_id = "web_user") =>
+  sendMessage: (content: string, from_id = "web_user", conversation_id?: string) =>
     fetch("/api/v1/message", {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ from_id, content, channel: "web" }),
+      body: JSON.stringify({ from_id, content, channel: "web", conversation_id }),
     }).then((r) => r.json() as Promise<ChatResponse>),
 
   // Sourcing

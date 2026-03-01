@@ -41,6 +41,7 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [orderLoadingFor, setOrderLoadingFor] = useState<string | null>(null);
   const [showComparison, setShowComparison] = useState<number | null>(null);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -82,7 +83,10 @@ export default function Chat() {
     } catch (err) {
       // Fallback to legacy chat if sourcing fails (e.g. user not asking about parts)
       try {
-        const legacyRes = await api.sendMessage(trimmed);
+        const legacyRes = await api.sendMessage(trimmed, "web_user", conversationId);
+        if (legacyRes.conversation_id) {
+          setConversationId(legacyRes.conversation_id);
+        }
         const botMessage: Message = {
           role: "assistant",
           content:

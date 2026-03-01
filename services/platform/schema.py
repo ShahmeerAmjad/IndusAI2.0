@@ -519,6 +519,18 @@ CREATE TABLE IF NOT EXISTS rfq_responses (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Conversations (multi-turn chatbot)
+CREATE TABLE IF NOT EXISTS conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id),
+    channel VARCHAR(20) NOT NULL DEFAULT 'web',
+    title TEXT,
+    context_summary TEXT,
+    message_count INTEGER DEFAULT 0,
+    last_message_at TIMESTAMPTZ DEFAULT now(),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Sourcing Orders (from chat)
 CREATE TABLE IF NOT EXISTS sourcing_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -610,6 +622,10 @@ CREATE INDEX IF NOT EXISTS idx_users_org ON users(org_id);
 CREATE INDEX IF NOT EXISTS idx_locations_org ON locations(org_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
+
+-- Conversations
+CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_last_msg ON conversations(last_message_at DESC);
 
 -- Sellers
 CREATE INDEX IF NOT EXISTS idx_seller_listings_part ON seller_listings(part_sku);

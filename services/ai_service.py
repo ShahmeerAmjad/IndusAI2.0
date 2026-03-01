@@ -109,12 +109,15 @@ class AIService:
                     if msg_count > 1:
                         user_prompt += f"\n\nContext: Returning customer with {msg_count} messages in this session."
 
+                # Build multi-turn messages if conversation history exists
+                messages = self._build_messages(user_prompt, context)
+
                 message = await self.client.messages.create(
                     model=model,
                     max_tokens=300,
                     temperature=0.3,
                     system=system_prompt,
-                    messages=[{"role": "user", "content": user_prompt}]
+                    messages=messages,
                 )
 
                 self.circuit_breaker.record_success()
@@ -128,3 +131,27 @@ class AIService:
         self.circuit_breaker.record_failure()
         ERROR_COUNTER.labels(error_type="ai_enhancement").inc()
         return basic_response
+
+    def _build_messages(self, current_prompt: str, context: Dict = None) -> list:
+        """Build multi-turn messages array from conversation history.
+
+        If conversation history exists, includes prior exchanges so Claude
+        has full context for the enhancement.
+        """
+        history = (context or {}).get("conversation_history", [])
+        if not history:
+            return [{"role": "user", "content": current_prompt}]
+
+        messages = []
+        for msg in history:
+            content = msg.get("content", "")
+            response = msg.get("response_content")
+            # User turn
+            messages.append({"role": "user", "content": content})
+            # Assistant turn (if we have the response)
+            if response:
+                messages.append({"role": "assistant", "content": response})
+
+        # Add current turn
+        messages.append({"role": "user", "content": current_prompt})
+        return messages
