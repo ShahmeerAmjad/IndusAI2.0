@@ -11,7 +11,6 @@ import {
   RotateCcw,
   Bot,
   Radio,
-  Search,
   Bug,
   Upload,
 } from "lucide-react";
@@ -26,7 +25,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Back-Office",
     items: [
-      { to: "/", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { to: "/products", label: "Products", icon: Package },
       { to: "/inventory", label: "Inventory", icon: Warehouse },
       { to: "/orders", label: "Orders", icon: ClipboardList },
@@ -41,12 +40,6 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/channels", label: "Channels", icon: Radio },
       { to: "/chat", label: "AI Assistant", icon: Bot },
-    ],
-  },
-  {
-    label: "Intelligence",
-    items: [
-      { to: "/sourcing", label: "AI Sourcing", icon: Search },
     ],
   },
   {
@@ -84,7 +77,7 @@ export default function Sidebar() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === "/"}
+                  end={item.to === "/dashboard"}
                   className={({ isActive }) =>
                     cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",

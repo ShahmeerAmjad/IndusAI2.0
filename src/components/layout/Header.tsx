@@ -3,7 +3,7 @@ import { Bell, LogOut, User } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
 const PAGE_TITLES: Record<string, string> = {
-  "/": "Dashboard",
+  "/dashboard": "Dashboard",
   "/products": "Product Catalog",
   "/inventory": "Inventory Management",
   "/orders": "Order Management",
@@ -13,6 +13,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/rma": "Returns & RMA",
   "/channels": "Omnichannel Hub",
   "/chat": "AI Sourcing Assistant",
+  "/bulk-import": "Bulk Import",
   "/admin": "Admin Debug View",
 };
 

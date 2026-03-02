@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import AppLayout from "@/components/layout/AppLayout";
 
+const Landing = lazy(() => import("@/pages/Landing"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Products = lazy(() => import("@/pages/Products"));
 const ProductDetail = lazy(() => import("@/pages/ProductDetail"));
@@ -16,7 +17,6 @@ const Invoices = lazy(() => import("@/pages/Invoices"));
 const RMA = lazy(() => import("@/pages/RMA"));
 const Channels = lazy(() => import("@/pages/Channels"));
 const Chat = lazy(() => import("@/pages/Chat"));
-const Sourcing = lazy(() => import("@/pages/Sourcing"));
 const Login = lazy(() => import("@/pages/Login"));
 const Signup = lazy(() => import("@/pages/Signup"));
 const AdminDebug = lazy(() => import("@/pages/AdminDebug"));
@@ -51,7 +51,7 @@ function PublicOnly() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) return <FullPageLoader />;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
 
   return <Outlet />;
 }
@@ -61,6 +61,9 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          {/* Public landing page */}
+          <Route path="/landing" element={<Suspense fallback={<FullPageLoader />}><Landing /></Suspense>} />
+
           {/* Public auth routes */}
           <Route element={<PublicOnly />}>
             <Route path="/login" element={<Suspense fallback={<FullPageLoader />}><Login /></Suspense>} />
@@ -70,7 +73,7 @@ export default function App() {
           {/* Protected app routes */}
           <Route element={<RequireAuth />}>
             <Route element={<AppLayout />}>
-              <Route path="/" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
+              <Route path="/dashboard" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
               <Route path="/products" element={<Suspense fallback={<PageLoader />}><Products /></Suspense>} />
               <Route path="/products/:id" element={<Suspense fallback={<PageLoader />}><ProductDetail /></Suspense>} />
               <Route path="/inventory" element={<Suspense fallback={<PageLoader />}><Inventory /></Suspense>} />
@@ -82,14 +85,13 @@ export default function App() {
               <Route path="/rma" element={<Suspense fallback={<PageLoader />}><RMA /></Suspense>} />
               <Route path="/channels" element={<Suspense fallback={<PageLoader />}><Channels /></Suspense>} />
               <Route path="/chat" element={<Suspense fallback={<PageLoader />}><Chat /></Suspense>} />
-              <Route path="/sourcing" element={<Suspense fallback={<PageLoader />}><Sourcing /></Suspense>} />
               <Route path="/bulk-import" element={<Suspense fallback={<PageLoader />}><BulkImport /></Suspense>} />
               <Route path="/admin" element={<Suspense fallback={<PageLoader />}><AdminDebug /></Suspense>} />
             </Route>
           </Route>
 
           {/* Catch-all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/landing" replace />} />
         </Routes>
         <Toaster position="top-right" richColors />
       </AuthProvider>
