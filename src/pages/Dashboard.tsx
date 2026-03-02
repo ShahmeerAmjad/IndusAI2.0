@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, DashboardMetrics } from "@/lib/api";
 import { formatCurrency, formatNumber, statusColor, cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
+import { Link } from "react-router-dom";
 import {
   BarChart,
   Bar,
@@ -14,6 +16,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Area,
 } from "recharts";
 import {
   DollarSign,
@@ -24,6 +27,11 @@ import {
   FileText,
   CircleAlert,
   RotateCcw,
+  Search,
+  Plus,
+  Upload as UploadIcon,
+  Download,
+  Activity,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -145,6 +153,12 @@ function SalesTrendChart() {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+        <defs>
+          <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#1e3a8a" stopOpacity={0.15} />
+            <stop offset="100%" stopColor="#1e3a8a" stopOpacity={0} />
+          </linearGradient>
+        </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
         <XAxis
           dataKey="period"
@@ -161,6 +175,12 @@ function SalesTrendChart() {
           }
         />
         <Tooltip content={<ChartTooltip />} />
+        <Area
+          type="monotone"
+          dataKey="revenue"
+          stroke="none"
+          fill="url(#revenueGradient)"
+        />
         <Line
           type="monotone"
           dataKey="revenue"
@@ -179,6 +199,10 @@ function SalesTrendChart() {
 /* ------------------------------------------------------------------ */
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
   const {
     data: metrics,
     isLoading,
@@ -219,37 +243,37 @@ export default function Dashboard() {
       label: "Revenue Today",
       value: formatCurrency(metrics.revenue_today),
       icon: DollarSign,
-      border: "border-l-emerald-500",
-      bg: "bg-emerald-50/60",
-      iconBg: "bg-emerald-100",
-      iconColor: "text-emerald-600",
+      border: "border-l-tech-500",
+      bg: "bg-tech-50/60",
+      iconBg: "bg-tech-100",
+      iconColor: "text-tech-600",
     },
     {
       label: "Orders Today",
       value: formatNumber(metrics.orders_today),
       icon: Package,
-      border: "border-l-blue-600",
-      bg: "bg-blue-50/60",
-      iconBg: "bg-blue-100",
-      iconColor: "text-blue-600",
+      border: "border-l-industrial-600",
+      bg: "bg-industrial-50/60",
+      iconBg: "bg-industrial-100",
+      iconColor: "text-industrial-600",
     },
     {
       label: "Open Orders",
       value: formatNumber(metrics.open_orders),
       icon: ClipboardList,
-      border: "border-l-indigo-500",
-      bg: "bg-indigo-50/60",
-      iconBg: "bg-indigo-100",
-      iconColor: "text-indigo-600",
+      border: "border-l-industrial-800",
+      bg: "bg-industrial-50/40",
+      iconBg: "bg-industrial-100",
+      iconColor: "text-industrial-800",
     },
     {
       label: "Revenue This Month",
       value: formatCurrency(metrics.revenue_this_month),
       icon: TrendingUp,
-      border: "border-l-emerald-600",
-      bg: "bg-emerald-50/40",
-      iconBg: "bg-emerald-100",
-      iconColor: "text-emerald-600",
+      border: "border-l-tech-600",
+      bg: "bg-tech-50/40",
+      iconBg: "bg-tech-100",
+      iconColor: "text-tech-600",
     },
   ];
 
@@ -258,15 +282,15 @@ export default function Dashboard() {
       label: "Low Stock Items",
       value: metrics.low_stock_items,
       icon: AlertTriangle,
-      border: "border-l-orange-400",
-      textColor: "text-orange-600",
+      border: "border-l-amber-500",
+      textColor: "text-amber-600",
     },
     {
       label: "Pending Invoices",
       value: metrics.pending_invoices,
       icon: FileText,
-      border: "border-l-blue-400",
-      textColor: "text-blue-600",
+      border: "border-l-industrial-400",
+      textColor: "text-industrial-600",
     },
     {
       label: "Overdue Invoices",
@@ -279,7 +303,7 @@ export default function Dashboard() {
       label: "Open RMAs",
       value: metrics.open_rmas,
       icon: RotateCcw,
-      border: "border-l-amber-500",
+      border: "border-l-amber-400",
       textColor: "text-amber-600",
     },
   ];
@@ -304,14 +328,65 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="font-montserrat text-2xl font-bold text-slate-900">
-          Operations Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Real-time overview of your MRO distribution operations
-        </p>
+      {/* Welcome Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-montserrat text-2xl font-bold text-slate-900">
+            {greeting}, {user?.name?.split(" ")[0] || "there"}
+          </h1>
+          <p className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            {user?.org_name && (
+              <span className="rounded-full bg-industrial-100 px-2.5 py-0.5 text-xs font-medium text-industrial-700">
+                {user.org_name}
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-green-500" />
+          <span className="text-xs font-medium text-green-600">All Systems Operational</span>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Link to="/chat" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-industrial-300 hover:shadow-md">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-industrial-100 text-industrial-600 transition-colors group-hover:bg-industrial-600 group-hover:text-white">
+            <Search className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Search Parts</p>
+            <p className="text-[11px] text-slate-400">AI sourcing</p>
+          </div>
+        </Link>
+        <Link to="/orders" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-tech-300 hover:shadow-md">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-tech-100 text-tech-600 transition-colors group-hover:bg-tech-600 group-hover:text-white">
+            <Plus className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Create Order</p>
+            <p className="text-[11px] text-slate-400">New O2C order</p>
+          </div>
+        </Link>
+        <Link to="/bulk-import" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-amber-300 hover:shadow-md">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-600 transition-colors group-hover:bg-amber-600 group-hover:text-white">
+            <UploadIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Import Data</p>
+            <p className="text-[11px] text-slate-400">CSV upload</p>
+          </div>
+        </Link>
+        <Link to="/inventory" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-purple-300 hover:shadow-md">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600 transition-colors group-hover:bg-purple-600 group-hover:text-white">
+            <Download className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Download Report</p>
+            <p className="text-[11px] text-slate-400">Inventory export</p>
+          </div>
+        </Link>
       </div>
 
       {/* ---- Row 1: KPI Cards ---- */}
