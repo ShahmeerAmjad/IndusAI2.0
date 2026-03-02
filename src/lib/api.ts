@@ -266,6 +266,8 @@ export interface SourcingResult {
   distance_km: number | null;
   qty_available: number;
   manufacturer: string;
+  reliability: number;
+  cross_ref_type?: string;
 }
 
 export interface SourcingResponse {
@@ -354,7 +356,7 @@ export const api = {
 
   // Invoices
   getInvoices: (page = 1, status = "") => get<PaginatedResponse<Invoice>>(`/invoices?page=${page}&page_size=20${status ? `&status=${status}` : ""}`),
-  getARaging: () => get<Record<string, { count: number; balance: number }>>("/invoices/ar-aging"),
+  getARaging: () => get<Record<string, { count: number; balance: number }>>("/invoices/aging"),
 
   // RMA
   getRMAs: (page = 1) => get<PaginatedResponse<RMA>>(`/rma?page=${page}&page_size=20`),
