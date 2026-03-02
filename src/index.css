@@ -35,6 +35,17 @@
     --sidebar-border: 217 33% 17%;
     --sidebar-ring: 217 91% 60%;
   }
+
+  .chat-dark {
+    --chat-bg: 222 47% 8%;
+    --chat-surface: 222 47% 12%;
+    --chat-border: 217 33% 20%;
+    --chat-text: 210 40% 92%;
+    --chat-text-muted: 215 16% 58%;
+    --chat-user-bubble: 217 91% 35%;
+    --chat-ai-bubble: 222 47% 15%;
+    --chat-ai-glow: 217 91% 50%;
+  }
 }
 
 @layer base {
