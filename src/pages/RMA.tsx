@@ -24,7 +24,7 @@ export default function RMA() {
       {/* Loading */}
       {rmaQuery.isLoading && (
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-industrial-600 border-t-transparent" />
           <span className="ml-3 text-sm text-gray-500">Loading RMAs...</span>
         </div>
       )}
@@ -52,21 +52,21 @@ export default function RMA() {
         <>
           <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <thead>
+                <tr className="border-b bg-slate-50/80">
+                  <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     RMA #
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Customer
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Reason
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Created At
                   </th>
                 </tr>
@@ -77,7 +77,7 @@ export default function RMA() {
                     key={rma.id}
                     className="hover:bg-gray-50 transition-colors"
                   >
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-blue-600">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-industrial-600">
                       {rma.rma_number}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">

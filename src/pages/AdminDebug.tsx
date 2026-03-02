@@ -72,8 +72,8 @@ function StatCard({
 }) {
   const colors: Record<string, string> = {
     slate: "bg-slate-100 text-slate-600",
-    blue: "bg-blue-100 text-blue-600",
-    green: "bg-green-100 text-green-600",
+    blue: "bg-industrial-100 text-industrial-600",
+    green: "bg-tech-100 text-tech-600",
     amber: "bg-amber-100 text-amber-600",
     red: "bg-red-100 text-red-600",
   };

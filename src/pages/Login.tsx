@@ -100,6 +100,25 @@ export default function Login() {
           </button>
         </form>
 
+        {/* Demo credentials */}
+        <div className="rounded-lg bg-industrial-50 border border-industrial-200 px-4 py-3">
+          <p className="text-xs font-semibold text-industrial-800 mb-1">Demo Credentials</p>
+          <div className="flex items-center justify-between text-sm text-industrial-700">
+            <span>demo@indusai.com</span>
+            <span className="font-mono">demo1234</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEmail("demo@indusai.com");
+              setPassword("demo1234");
+            }}
+            className="mt-2 w-full rounded-md bg-industrial-100 px-3 py-1.5 text-xs font-medium text-industrial-700 hover:bg-industrial-200 transition-colors"
+          >
+            Fill demo credentials
+          </button>
+        </div>
+
         <p className="text-center text-sm text-slate-500">
           Don't have an account?{" "}
           <Link

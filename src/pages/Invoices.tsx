@@ -94,7 +94,7 @@ export default function Invoices() {
             className={cn(
               "whitespace-nowrap border-b-2 py-3 px-1 text-sm font-medium transition-colors",
               tab === "invoices"
-                ? "border-blue-600 text-blue-600"
+                ? "border-industrial-600 text-industrial-600"
                 : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
             )}
           >
@@ -105,7 +105,7 @@ export default function Invoices() {
             className={cn(
               "whitespace-nowrap border-b-2 py-3 px-1 text-sm font-medium transition-colors",
               tab === "aging"
-                ? "border-blue-600 text-blue-600"
+                ? "border-industrial-600 text-industrial-600"
                 : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
             )}
           >
@@ -130,7 +130,7 @@ export default function Invoices() {
                 className={cn(
                   "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                   statusFilter === opt.value
-                    ? "bg-blue-600 text-white"
+                    ? "bg-industrial-600 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 )}
               >
@@ -142,7 +142,7 @@ export default function Invoices() {
           {/* Loading */}
           {invoicesQuery.isLoading && (
             <div className="flex items-center justify-center py-12">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-industrial-600 border-t-transparent" />
               <span className="ml-3 text-sm text-gray-500">
                 Loading invoices...
               </span>
@@ -172,27 +172,27 @@ export default function Invoices() {
             <>
               <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <thead>
+                    <tr className="border-b bg-slate-50/80">
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Invoice #
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Customer
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Status
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Total
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Balance Due
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Invoice Date
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Due Date
                       </th>
                     </tr>
@@ -203,7 +203,7 @@ export default function Invoices() {
                         key={inv.id}
                         className="hover:bg-gray-50 transition-colors"
                       >
-                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-blue-600">
+                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-industrial-600">
                           {inv.invoice_number}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
@@ -288,7 +288,7 @@ export default function Invoices() {
           {/* Loading */}
           {agingQuery.isLoading && (
             <div className="flex items-center justify-center py-12">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-industrial-600 border-t-transparent" />
               <span className="ml-3 text-sm text-gray-500">
                 Loading AR aging data...
               </span>

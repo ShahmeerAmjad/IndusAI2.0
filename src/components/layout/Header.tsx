@@ -1,5 +1,5 @@
 import { useLocation } from "react-router-dom";
-import { Bell, LogOut, User } from "lucide-react";
+import { Bell, LogOut, User, Menu } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
 const PAGE_TITLES: Record<string, string> = {
@@ -17,7 +17,11 @@ const PAGE_TITLES: Record<string, string> = {
   "/admin": "Admin Debug View",
 };
 
-export default function Header() {
+interface HeaderProps {
+  onMenuToggle?: () => void;
+}
+
+export default function Header({ onMenuToggle }: HeaderProps) {
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
   const baseRoute = "/" + (pathname.split("/")[1] || "");
@@ -25,7 +29,15 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-white/80 px-6 backdrop-blur">
-      <div>
+      <div className="flex items-center gap-3">
+        {onMenuToggle && (
+          <button
+            onClick={onMenuToggle}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors lg:hidden"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
         <h1 className="text-lg font-semibold text-slate-800">{title}</h1>
       </div>
       <div className="flex items-center gap-4">

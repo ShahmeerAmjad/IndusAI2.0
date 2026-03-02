@@ -170,12 +170,12 @@ export default function Channels() {
 
           {/* Summary metrics row */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-lg border border-slate-200 border-l-4 border-l-blue-500 bg-white px-4 py-3 shadow-sm">
+            <div className="rounded-lg border border-slate-200 border-l-4 border-l-industrial-500 bg-white px-4 py-3 shadow-sm">
               <div className="flex items-center gap-2">
-                <Inbox className="h-4 w-4 text-blue-600" />
+                <Inbox className="h-4 w-4 text-industrial-600" />
                 <span className="text-xs font-medium text-slate-500">Total Messages</span>
               </div>
-              <p className="mt-1 text-2xl font-bold text-blue-600">
+              <p className="mt-1 text-2xl font-bold text-industrial-600">
                 {formatNumber(stats?.total_messages ?? 0)}
               </p>
             </div>
@@ -188,12 +188,12 @@ export default function Channels() {
                 {formatNumber(stats?.open_escalations ?? 0)}
               </p>
             </div>
-            <div className="rounded-lg border border-slate-200 border-l-4 border-l-emerald-500 bg-white px-4 py-3 shadow-sm">
+            <div className="rounded-lg border border-slate-200 border-l-4 border-l-tech-500 bg-white px-4 py-3 shadow-sm">
               <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-emerald-600" />
+                <TrendingUp className="h-4 w-4 text-tech-600" />
                 <span className="text-xs font-medium text-slate-500">Active Channels</span>
               </div>
-              <p className="mt-1 text-2xl font-bold text-emerald-600">
+              <p className="mt-1 text-2xl font-bold text-tech-600">
                 {Object.keys(stats?.channels ?? {}).length} / {allChannels.length}
               </p>
             </div>
@@ -217,7 +217,7 @@ export default function Channels() {
                 </h2>
                 <button
                   onClick={() => setActiveTab("conversations")}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-industrial-600 hover:text-industrial-700"
                 >
                   View All <ArrowUpRight className="h-3 w-3" />
                 </button>
@@ -297,14 +297,14 @@ export default function Channels() {
             <>
               <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Channel</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">From</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Message</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Intent</th>
-                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Response Time</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Timestamp</th>
+                  <thead>
+                    <tr className="border-b bg-slate-50/80">
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Channel</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">From</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Message</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Intent</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Response Time</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Timestamp</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -427,14 +427,14 @@ export default function Channels() {
             <>
               <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Priority</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Customer</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Subject</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Assigned To</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Created</th>
+                  <thead>
+                    <tr className="border-b bg-slate-50/80">
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Priority</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Customer</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Subject</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Assigned To</th>
+                      <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Created</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">

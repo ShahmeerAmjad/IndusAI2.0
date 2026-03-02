@@ -134,8 +134,8 @@ export default function OrderDetail() {
               className={cn(
                 "rounded-md px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors",
                 isMutating
-                  ? "cursor-not-allowed bg-blue-400"
-                  : "bg-blue-600 hover:bg-blue-700"
+                  ? "cursor-not-allowed bg-industrial-400"
+                  : "bg-industrial-600 hover:bg-industrial-700"
               )}
             >
               {submitMutation.isPending ? "Submitting..." : "Submit Order"}
@@ -148,8 +148,8 @@ export default function OrderDetail() {
               className={cn(
                 "rounded-md px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors",
                 isMutating
-                  ? "cursor-not-allowed bg-indigo-400"
-                  : "bg-indigo-600 hover:bg-indigo-700"
+                  ? "cursor-not-allowed bg-industrial-400"
+                  : "bg-industrial-700 hover:bg-industrial-800"
               )}
             >
               {confirmMutation.isPending ? "Confirming..." : "Confirm Order"}
@@ -162,8 +162,8 @@ export default function OrderDetail() {
               className={cn(
                 "rounded-md px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors",
                 isMutating
-                  ? "cursor-not-allowed bg-purple-400"
-                  : "bg-purple-600 hover:bg-purple-700"
+                  ? "cursor-not-allowed bg-tech-400"
+                  : "bg-tech-600 hover:bg-tech-700"
               )}
             >
               {shipMutation.isPending ? "Processing..." : "Ship Order"}
@@ -234,24 +234,24 @@ export default function OrderDetail() {
           <h2 className="text-sm font-semibold text-gray-700">Order Lines</h2>
         </div>
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+          <thead>
+            <tr className="border-b bg-slate-50/80">
+              <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 #
               </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 SKU
               </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Description
               </th>
-              <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Qty
               </th>
-              <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Unit Price
               </th>
-              <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Line Total
               </th>
             </tr>

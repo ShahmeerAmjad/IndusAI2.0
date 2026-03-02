@@ -158,29 +158,29 @@ function StockLevelsTab({ data, isLoading, isError, error, page, onPageChange }:
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-neutral-50 border-b border-neutral-200">
-                <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+              <tr className="border-b bg-slate-50/80">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                   SKU
                 </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Product
                 </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Warehouse
                 </th>
-                <th className="text-right py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                   On Hand
                 </th>
-                <th className="text-right py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Reserved
                 </th>
-                <th className="text-right py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Available
                 </th>
-                <th className="text-right py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Reorder Pt
                 </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Bin Location
                 </th>
               </tr>
@@ -313,9 +313,9 @@ function ReorderAlertsTab({ data, isLoading, isError, error }: ReorderAlertsTabP
 
   if (alerts.length === 0) {
     return (
-      <div className="text-center py-16 bg-green-50 rounded-lg border border-dashed border-green-300">
+      <div className="text-center py-16 bg-tech-50 rounded-lg border border-dashed border-tech-300">
         <svg
-          className="h-10 w-10 text-green-400 mx-auto mb-3"
+          className="h-10 w-10 text-tech-400 mx-auto mb-3"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -327,8 +327,8 @@ function ReorderAlertsTab({ data, isLoading, isError, error }: ReorderAlertsTabP
             d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
-        <p className="text-green-700 font-medium text-sm">All stock levels are above reorder points.</p>
-        <p className="text-green-600 text-xs mt-1">No reorder alerts at this time.</p>
+        <p className="text-tech-700 font-medium text-sm">All stock levels are above reorder points.</p>
+        <p className="text-tech-600 text-xs mt-1">No reorder alerts at this time.</p>
       </div>
     );
   }
