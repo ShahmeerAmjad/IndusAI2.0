@@ -137,8 +137,8 @@ export default function Procurement() {
 
       {/* Purchase Orders tab */}
       {!isLoading && !isError && activeTab === "purchase-orders" && (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="overflow-x-auto overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-[600px] min-w-full divide-y divide-gray-200">
             <thead>
               <tr className="border-b bg-slate-50/80">
                 <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -214,8 +214,8 @@ export default function Procurement() {
 
       {/* Suppliers tab */}
       {!isLoading && !isError && activeTab === "suppliers" && (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="overflow-x-auto overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-[600px] min-w-full divide-y divide-gray-200">
             <thead>
               <tr className="border-b bg-slate-50/80">
                 <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">

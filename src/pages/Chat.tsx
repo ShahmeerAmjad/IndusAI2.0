@@ -414,13 +414,33 @@ export default function Chat() {
 
                 {/* Order Confirmation */}
                 {msg.orderConfirmation && (
-                  <div className="mt-2 rounded-lg border border-green-200 bg-green-50 p-3">
-                    <p className="text-xs font-medium text-green-800">
-                      Order #{msg.orderConfirmation.order_id}
-                    </p>
-                    <p className="text-xs text-green-600">
-                      {msg.orderConfirmation.message}
-                    </p>
+                  <div className="mt-3 animate-scale-in">
+                    <div className={cn(
+                      "rounded-xl border p-4 shadow-sm",
+                      darkMode
+                        ? "border-tech-700 bg-gradient-to-br from-tech-900/50 to-[hsl(222,47%,12%)]"
+                        : "border-tech-200 bg-gradient-to-br from-tech-50 to-white"
+                    )}>
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "flex h-10 w-10 items-center justify-center rounded-full",
+                          darkMode ? "bg-tech-800" : "bg-tech-100"
+                        )}>
+                          <CheckCircle2 className="h-6 w-6 text-tech-500" />
+                        </div>
+                        <div>
+                          <p className={cn("text-sm font-semibold", darkMode ? "text-white" : "text-slate-800")}>
+                            Order Confirmed
+                          </p>
+                          <p className={cn("text-xs", darkMode ? "text-slate-400" : "text-slate-500")}>
+                            #{msg.orderConfirmation.order_id}
+                          </p>
+                        </div>
+                      </div>
+                      <p className={cn("mt-2 text-xs", darkMode ? "text-slate-300" : "text-slate-600")}>
+                        {msg.orderConfirmation.message}
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -542,7 +562,7 @@ export default function Chat() {
               placeholder="Search for MRO parts — e.g. 'SKF 6205 bearing' or '3M masking tape'"
               disabled={isLoading}
               className={cn(
-                "flex-1 rounded-full border px-4 py-2.5 text-sm shadow-sm transition-colors focus:border-industrial-500 focus:outline-none focus:ring-2 focus:ring-industrial-500/20 disabled:cursor-not-allowed",
+                "min-w-0 flex-1 rounded-full border px-4 py-2.5 text-sm shadow-sm transition-colors focus:border-industrial-500 focus:outline-none focus:ring-2 focus:ring-industrial-500/20 disabled:cursor-not-allowed",
                 darkMode
                   ? "bg-[hsl(222,47%,8%)] text-white border-[hsl(217,33%,20%)] placeholder-slate-500 disabled:bg-[hsl(222,47%,6%)]"
                   : "bg-white text-gray-900 border-gray-300 placeholder-gray-400 disabled:bg-gray-100",
