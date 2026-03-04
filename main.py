@@ -91,6 +91,7 @@ from routes.graph import router as graph_router, set_graph_services
 from routes.admin_graph import router as admin_router, set_admin_services
 from routes.reports import router as reports_router, set_report_service
 from routes.bulk import router as bulk_router, set_bulk_service
+from routes.email_admin import router as email_admin_router, set_email_admin_services
 from services.report_service import ReportService
 from services.bulk_import_service import BulkImportService
 from services.seller_service import SellerService
@@ -99,6 +100,8 @@ from services.intelligence.price_comparator import PriceComparator
 from services.intelligence.reliability import ReliabilityScorer
 from services.intelligence.freshness_scheduler import FreshnessScheduler
 from services.ingestion.web_scraper import WebScraper
+from services.multi_intent_classifier import MultiIntentClassifier, set_classifier
+from services.auto_response_engine import AutoResponseEngine, set_response_engine
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -196,6 +199,13 @@ class Settings(BaseSettings):
     smtp_port: int = Field(default=587)
     smtp_username: Optional[str] = Field(default=None)
     smtp_password: Optional[str] = Field(default=None)
+
+    # Email ingestion pipeline
+    email_encryption_key: Optional[str] = Field(default=None)
+    email_poll_interval_seconds: int = Field(default=60)
+    email_max_messages_per_poll: int = Field(default=50)
+    email_attachment_dir: str = Field(default="data/email_attachments")
+    email_retention_days: int = Field(default=90)
 
     # Rate limiting
     rate_limit_per_minute: int = Field(default=60)
@@ -426,10 +436,20 @@ async def lifespan(app: FastAPI):
     # Create platform tables & indexes
     if db_manager.pool:
         try:
-            from services.platform.schema import PLATFORM_SCHEMA, PLATFORM_INDEXES
+            from services.platform.schema import (
+                PLATFORM_SCHEMA, PLATFORM_INDEXES,
+                SUPPLIER_SALES_SCHEMA, SUPPLIER_SALES_INDEXES,
+            )
             async with db_manager.pool.acquire() as conn:
                 await conn.execute(PLATFORM_SCHEMA)
                 await conn.execute(PLATFORM_INDEXES)
+                await conn.execute(SUPPLIER_SALES_SCHEMA)
+                await conn.execute(SUPPLIER_SALES_INDEXES)
+
+                # Email ingestion tables
+                from services.platform.schema import EMAIL_SCHEMA, EMAIL_INDEXES
+                await conn.execute(EMAIL_SCHEMA)
+                await conn.execute(EMAIL_INDEXES)
             logger.info("Platform schema ready")
         except Exception as e:
             logger.error(f"Platform schema creation failed: {e}")
@@ -508,6 +528,90 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Bulk sync failed: %s", e)
 
+    # Email ingestion pipeline (non-fatal)
+    if db_manager.pool:
+        try:
+            from services.email.encryption import FernetEncryption
+            from services.email.pii_scanner import PIIScanner
+            from services.email.parser import EmailParser
+            from services.email.connector import GmailConnector
+            from services.email.ingestion_service import (
+                EmailIngestionService, set_ingestion_service,
+            )
+
+            email_encryption = FernetEncryption(settings.email_encryption_key)
+            gmail_connector = GmailConnector(db_manager, email_encryption, logger)
+            email_parser = EmailParser()
+            pii_scanner = PIIScanner()
+
+            email_ingestion = EmailIngestionService(
+                db_manager=db_manager,
+                connector=gmail_connector,
+                parser=email_parser,
+                pii_scanner=pii_scanner,
+                encryption=email_encryption,
+                logger=logger,
+                attachment_dir=settings.email_attachment_dir,
+                max_messages_per_poll=settings.email_max_messages_per_poll,
+                redis_client=getattr(comm_manager, "redis", None),
+            )
+            set_ingestion_service(email_ingestion)
+            set_email_admin_services(db_manager, email_encryption, email_ingestion)
+
+            # Add polling job to existing scheduler
+            sched = getattr(app.state, "freshness_scheduler", None)
+            if sched and hasattr(sched, "_scheduler"):
+                sched._scheduler.add_job(
+                    email_ingestion.poll_all_inboxes,
+                    "interval",
+                    seconds=settings.email_poll_interval_seconds,
+                    id="email_poll",
+                    name="Poll email inboxes",
+                )
+                sched._scheduler.add_job(
+                    lambda: email_ingestion.purge_old_messages(settings.email_retention_days),
+                    "cron",
+                    day_of_week="sun", hour=4,
+                    id="email_retention_purge",
+                    name="Purge old email payloads",
+                )
+                logger.info("Email ingestion polling scheduled (%ds interval)",
+                            settings.email_poll_interval_seconds)
+            else:
+                logger.warning("No scheduler available — email polling not started")
+
+        except Exception as e:
+            logger.warning("Email ingestion setup failed (non-fatal): %s", e)
+
+    # Multi-intent classifier & auto-response engine (non-fatal)
+    try:
+        _llm = getattr(app.state, "llm_router", None)
+        _graph = getattr(app.state, "graph_service", None)
+
+        multi_classifier = MultiIntentClassifier(llm_router=_llm)
+        set_classifier(multi_classifier)
+        app.state.multi_intent_classifier = multi_classifier
+
+        # TDS/SDS service (needs neo4j_client)
+        _neo4j = getattr(app.state, "neo4j_client", None)
+        _tds_sds = None
+        if _neo4j:
+            from services.graph.tds_sds_service import TDSSDSGraphService
+            _tds_sds = TDSSDSGraphService(_neo4j)
+
+        response_engine = AutoResponseEngine(
+            graph_service=_graph,
+            tds_sds_service=_tds_sds,
+            llm_router=_llm,
+            db_manager=db_manager,
+        )
+        set_response_engine(response_engine)
+        app.state.auto_response_engine = response_engine
+
+        logger.info("Multi-intent classifier & auto-response engine ready")
+    except Exception as e:
+        logger.warning("Classifier/response engine setup failed (non-fatal): %s", e)
+
     if settings.debug:
         token = create_admin_token("admin")
         logger.info(f"Dev admin token: {token}")
@@ -547,6 +651,7 @@ app.include_router(graph_router)
 app.include_router(admin_router)
 app.include_router(reports_router)
 app.include_router(bulk_router)
+app.include_router(email_admin_router)
 
 # Rate limiter
 app.state.limiter = limiter

@@ -14,14 +14,22 @@ from services.ai.models import IntentType, IntentResult
 
 logger = logging.getLogger(__name__)
 
-# Mapping from the new IntentType enum to the legacy MessageType enum
+# Mapping from IntentType enum to the legacy MessageType enum
 INTENT_TO_MESSAGE_TYPE: dict[IntentType, MessageType] = {
+    # Supplier sales intents
+    IntentType.PLACE_ORDER: MessageType.ORDER_STATUS,
+    IntentType.REQUEST_QUOTE: MessageType.PRICE_REQUEST,
+    IntentType.REQUEST_TDS_SDS: MessageType.PRODUCT_INQUIRY,
     IntentType.ORDER_STATUS: MessageType.ORDER_STATUS,
+    IntentType.TECHNICAL_SUPPORT: MessageType.TECHNICAL_SUPPORT,
+    IntentType.RETURN_COMPLAINT: MessageType.RETURNS,
+    IntentType.REORDER: MessageType.ORDER_STATUS,
+    IntentType.ACCOUNT_INQUIRY: MessageType.GENERAL_QUERY,
+    IntentType.SAMPLE_REQUEST: MessageType.PRODUCT_INQUIRY,
+    # Legacy aliases
     IntentType.PART_LOOKUP: MessageType.PRODUCT_INQUIRY,
     IntentType.INVENTORY_CHECK: MessageType.PRODUCT_INQUIRY,
     IntentType.QUOTE_REQUEST: MessageType.PRICE_REQUEST,
-    IntentType.TECHNICAL_SUPPORT: MessageType.TECHNICAL_SUPPORT,
-    IntentType.ACCOUNT_INQUIRY: MessageType.GENERAL_QUERY,
     IntentType.RETURN_REQUEST: MessageType.RETURNS,
     IntentType.GENERAL_QUERY: MessageType.GENERAL_QUERY,
 }

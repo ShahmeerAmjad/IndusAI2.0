@@ -637,3 +637,165 @@ CREATE INDEX IF NOT EXISTS idx_rfq_responses_rfq ON rfq_responses(rfq_id);
 CREATE INDEX IF NOT EXISTS idx_sourcing_orders_org ON sourcing_orders(buyer_org_id);
 CREATE INDEX IF NOT EXISTS idx_sourcing_orders_user ON sourcing_orders(user_id);
 """
+
+# ── Supplier Sales & Support Automation Tables ──
+
+SUPPLIER_SALES_SCHEMA = """
+-- TDS/SDS Document Storage
+CREATE TABLE IF NOT EXISTS documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID REFERENCES products(id),
+    doc_type VARCHAR(10) NOT NULL,
+    file_path TEXT NOT NULL,
+    file_name TEXT,
+    file_size_bytes INTEGER,
+    mime_type VARCHAR(50),
+    extracted_text TEXT,
+    structured_data JSONB,
+    source_url TEXT,
+    revision_date DATE,
+    is_current BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Inbound Messages (email, web chat, fax)
+CREATE TABLE IF NOT EXISTS inbound_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    channel VARCHAR(20) NOT NULL,
+    from_address TEXT NOT NULL,
+    to_address TEXT,
+    subject TEXT,
+    body TEXT NOT NULL,
+    raw_payload JSONB,
+    attachments JSONB,
+    intents JSONB,
+    status VARCHAR(20) DEFAULT 'new',
+    assigned_to UUID,
+    ai_draft_response TEXT,
+    ai_confidence FLOAT,
+    conversation_id UUID,
+    customer_account_id UUID,
+    thread_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Customer Accounts
+CREATE TABLE IF NOT EXISTS customer_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    fax_number TEXT,
+    company TEXT,
+    account_number TEXT,
+    erp_customer_id TEXT,
+    pricing_tier VARCHAR(20),
+    payment_terms VARCHAR(50),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Classification Feedback (trainable classifier)
+CREATE TABLE IF NOT EXISTS classification_feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id UUID REFERENCES inbound_messages(id),
+    ai_intent VARCHAR(30),
+    ai_confidence FLOAT,
+    human_intent VARCHAR(30),
+    text_excerpt TEXT,
+    is_correct BOOLEAN,
+    corrected_by UUID,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ERP Connections (future)
+CREATE TABLE IF NOT EXISTS erp_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID REFERENCES organizations(id),
+    erp_type VARCHAR(30) NOT NULL,
+    connection_config JSONB,
+    sync_schedule VARCHAR(20),
+    last_sync_at TIMESTAMPTZ,
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+"""
+
+SUPPLIER_SALES_INDEXES = """
+-- Documents
+CREATE INDEX IF NOT EXISTS idx_documents_product ON documents(product_id);
+CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(doc_type);
+CREATE INDEX IF NOT EXISTS idx_documents_current ON documents(is_current) WHERE is_current = TRUE;
+
+-- Inbound Messages
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_channel ON inbound_messages(channel);
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_status ON inbound_messages(status);
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_customer ON inbound_messages(customer_account_id);
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_thread ON inbound_messages(thread_id);
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_created ON inbound_messages(created_at DESC);
+
+-- Customer Accounts
+CREATE INDEX IF NOT EXISTS idx_customer_accounts_email ON customer_accounts(email);
+CREATE INDEX IF NOT EXISTS idx_customer_accounts_company ON customer_accounts(company);
+CREATE INDEX IF NOT EXISTS idx_customer_accounts_account_number ON customer_accounts(account_number);
+
+-- Classification Feedback
+CREATE INDEX IF NOT EXISTS idx_classification_feedback_message ON classification_feedback(message_id);
+CREATE INDEX IF NOT EXISTS idx_classification_feedback_correct ON classification_feedback(is_correct);
+
+-- ERP Connections
+CREATE INDEX IF NOT EXISTS idx_erp_connections_org ON erp_connections(org_id);
+CREATE INDEX IF NOT EXISTS idx_erp_connections_status ON erp_connections(status);
+"""
+
+# ── Email Ingestion Pipeline Tables ──
+
+EMAIL_SCHEMA = """
+-- OAuth2 tokens per inbox (encrypted at app layer)
+CREATE TABLE IF NOT EXISTS email_oauth_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    inbox_address TEXT UNIQUE NOT NULL,
+    provider VARCHAR(20) NOT NULL DEFAULT 'gmail',
+    access_token TEXT,
+    refresh_token TEXT,
+    token_expiry TIMESTAMPTZ,
+    history_id TEXT,
+    last_polled_at TIMESTAMPTZ,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Immutable append-only audit log
+CREATE TABLE IF NOT EXISTS email_audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(30) NOT NULL,
+    message_id UUID,
+    gmail_message_id TEXT,
+    inbox_address TEXT,
+    detail JSONB,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Extend inbound_messages for email-specific fields
+ALTER TABLE inbound_messages
+    ADD COLUMN IF NOT EXISTS gmail_message_id TEXT,
+    ADD COLUMN IF NOT EXISTS body_encrypted BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS pii_redacted BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS size_bytes INTEGER;
+"""
+
+EMAIL_INDEXES = """
+-- OAuth tokens
+CREATE INDEX IF NOT EXISTS idx_email_oauth_inbox ON email_oauth_tokens(inbox_address);
+CREATE INDEX IF NOT EXISTS idx_email_oauth_active ON email_oauth_tokens(is_active) WHERE is_active = true;
+
+-- Audit log
+CREATE INDEX IF NOT EXISTS idx_email_audit_event ON email_audit_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_email_audit_gmail_id ON email_audit_log(gmail_message_id);
+CREATE INDEX IF NOT EXISTS idx_email_audit_created ON email_audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_audit_inbox ON email_audit_log(inbox_address);
+
+-- Gmail message dedup
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inbound_messages_gmail_id ON inbound_messages(gmail_message_id) WHERE gmail_message_id IS NOT NULL;
+"""
