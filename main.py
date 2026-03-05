@@ -641,7 +641,7 @@ async def lifespan(app: FastAPI):
         from services.knowledge_base_service import KnowledgeBaseService
         kb_service = KnowledgeBaseService(
             pool=db_manager.pool,
-            graph_service=getattr(app.state, "graph_service", None),
+            graph_service=getattr(app.state, "neo4j_client", None),
             llm_router=_llm,
         )
         set_kb_service(kb_service)
