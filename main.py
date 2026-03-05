@@ -88,7 +88,7 @@ from services.auth_service import AuthService
 from routes.sourcing import router as sourcing_router, set_sourcing_services
 from routes.rfq import router as rfq_router, set_rfq_db
 from routes.graph import router as graph_router, set_graph_services
-from routes.admin_graph import router as admin_router, set_admin_services
+from routes.admin_graph import router as admin_router, set_admin_services, set_seed_pipeline
 from routes.reports import router as reports_router, set_report_service
 from routes.bulk import router as bulk_router, set_bulk_service
 from routes.email_admin import router as email_admin_router, set_email_admin_services
@@ -102,6 +102,10 @@ from services.intelligence.freshness_scheduler import FreshnessScheduler
 from services.ingestion.web_scraper import WebScraper
 from services.multi_intent_classifier import MultiIntentClassifier, set_classifier
 from services.auto_response_engine import AutoResponseEngine, set_response_engine
+from routes.inbox import router as inbox_router, set_inbox_services
+from routes.documents import router as documents_router, set_document_services
+from routes.customer_accounts import router as customer_accounts_router, set_customer_account_services
+from routes.knowledge_base import router as kb_router, set_kb_service, set_chempoint_scraper
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -415,6 +419,7 @@ async def lifespan(app: FastAPI):
             llm_router=llm_router,
             firecrawl_api_key=settings.firecrawl_api_key,
         )
+        app.state.web_scraper = web_scraper
         freshness_scheduler = FreshnessScheduler(
             seller_service=seller_service,
             web_scraper=web_scraper,
@@ -474,17 +479,17 @@ async def lifespan(app: FastAPI):
 
     # Inject services into the platform API router
     set_services({
-        "product_service": product_service,
-        "inventory_service": inventory_service,
-        "customer_service": customer_service,
-        "pricing_service": pricing_service,
-        "order_service": order_service,
-        "quote_service": quote_service,
-        "procurement_service": procurement_service,
-        "invoice_service": invoice_service,
-        "rma_service": rma_service,
-        "workflow_engine": workflow_engine,
-        "analytics_service": analytics_service,
+        "products": product_service,
+        "inventory": inventory_service,
+        "customers": customer_service,
+        "pricing": pricing_service,
+        "orders": order_service,
+        "quotes": quote_service,
+        "procurement": procurement_service,
+        "invoices": invoice_service,
+        "rma": rma_service,
+        "workflow": workflow_engine,
+        "analytics": analytics_service,
     })
 
     # Seed demo data in debug mode
@@ -588,7 +593,14 @@ async def lifespan(app: FastAPI):
         _llm = getattr(app.state, "llm_router", None)
         _graph = getattr(app.state, "graph_service", None)
 
-        multi_classifier = MultiIntentClassifier(llm_router=_llm)
+        # Classification feedback service
+        from services.classification_feedback_service import (
+            ClassificationFeedbackService, set_feedback_service,
+        )
+        feedback_service = ClassificationFeedbackService(db_manager)
+        set_feedback_service(feedback_service)
+
+        multi_classifier = MultiIntentClassifier(llm_router=_llm, feedback_service=feedback_service)
         set_classifier(multi_classifier)
         app.state.multi_intent_classifier = multi_classifier
 
@@ -608,7 +620,89 @@ async def lifespan(app: FastAPI):
         set_response_engine(response_engine)
         app.state.auto_response_engine = response_engine
 
-        logger.info("Multi-intent classifier & auto-response engine ready")
+        # Wire inbox routes
+        set_inbox_services(
+            db_manager=db_manager,
+            classifier=multi_classifier,
+            response_engine=response_engine,
+        )
+
+        # Wire document routes
+        from services.document_service import DocumentService
+        doc_service = DocumentService(db_manager, ai_service=_llm)
+        set_document_services(document_service=doc_service)
+
+        # Wire customer account routes
+        from services.customer_account_service import CustomerAccountService
+        acct_service = CustomerAccountService(db_manager)
+        set_customer_account_services(account_service=acct_service)
+
+        # Wire knowledge base routes
+        from services.knowledge_base_service import KnowledgeBaseService
+        kb_service = KnowledgeBaseService(
+            pool=db_manager.pool,
+            graph_service=getattr(app.state, "graph_service", None),
+            llm_router=_llm,
+        )
+        set_kb_service(kb_service)
+        if settings.firecrawl_api_key:
+            from services.ingestion.chempoint_scraper import ChempointScraper
+            chempoint_scraper = ChempointScraper(
+                firecrawl_api_key=settings.firecrawl_api_key, llm_router=_llm,
+            )
+            set_chempoint_scraper(chempoint_scraper)
+        logger.info("Knowledge base routes wired")
+
+        # Wire post-ingest auto-classification into email ingestion service
+        from services.email.ingestion_service import get_ingestion_service
+        _ingestion = get_ingestion_service()
+        if _ingestion and multi_classifier and response_engine:
+            async def _auto_classify_callback(message_id: str, body: str):
+                """Classify new message and generate AI draft response."""
+                try:
+                    result = await multi_classifier.classify(body)
+                    intents_json = [
+                        {"intent": i.intent.value if hasattr(i.intent, "value") else str(i.intent),
+                         "confidence": i.confidence, "text_span": i.text_span}
+                        for i in result.intents
+                    ]
+                    # Generate AI draft
+                    draft = await response_engine.generate_draft(
+                        body=body, intents=result, customer_account=None,
+                    )
+                    # Update message with classification + draft
+                    async with db_manager.pool.acquire() as conn:
+                        await conn.execute(
+                            """UPDATE inbound_messages
+                               SET intents = $2, ai_draft_response = $3,
+                                   ai_confidence = $4, status = 'classified',
+                                   updated_at = now()
+                               WHERE id = $1""",
+                            uuid.UUID(message_id),
+                            json.dumps(intents_json),
+                            draft.get("response_text", ""),
+                            draft.get("confidence", 0.0),
+                        )
+                    logger.info("Auto-classified message %s: %d intents, confidence=%.2f",
+                                message_id, len(result.intents), draft.get("confidence", 0.0))
+                except Exception as exc:
+                    logger.warning("Auto-classification failed for %s: %s", message_id, exc)
+
+            _ingestion.set_post_ingest_callback(_auto_classify_callback)
+            logger.info("Post-ingest auto-classification callback wired")
+
+        # Wire seed-chempoint pipeline
+        _scraper = getattr(app.state, "web_scraper", None)
+        if _tds_sds and doc_service and _scraper:
+            from services.ingestion.seed_chempoint import ChempointSeedPipeline
+            seed_pipeline = ChempointSeedPipeline(
+                scraper=_scraper, doc_service=doc_service,
+                graph_service=_tds_sds, db_manager=db_manager,
+            )
+            set_seed_pipeline(seed_pipeline)
+            logger.info("Seed-chempoint pipeline ready")
+
+        logger.info("Multi-intent classifier, auto-response engine & API routes ready")
     except Exception as e:
         logger.warning("Classifier/response engine setup failed (non-fatal): %s", e)
 
@@ -652,6 +746,10 @@ app.include_router(admin_router)
 app.include_router(reports_router)
 app.include_router(bulk_router)
 app.include_router(email_admin_router)
+app.include_router(inbox_router)
+app.include_router(documents_router)
+app.include_router(customer_accounts_router)
+app.include_router(kb_router)
 
 # Rate limiter
 app.state.limiter = limiter
