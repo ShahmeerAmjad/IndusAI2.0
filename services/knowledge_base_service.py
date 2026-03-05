@@ -161,14 +161,10 @@ class KnowledgeBaseService:
         OPTIONAL MATCH (p)-[:MANUFACTURED_BY]->(m:Manufacturer)
         OPTIONAL MATCH (p)-[:BELONGS_TO]->(pl:ProductLine)
         OPTIONAL MATCH (p)-[:SERVES_INDUSTRY]->(i:Industry)
-        OPTIONAL MATCH (p)-[:HAS_DOCUMENT]->(tds:Document {type: 'TDS'})
-        OPTIONAL MATCH (p)-[:HAS_DOCUMENT]->(sds:Document {type: 'SDS'})
         RETURN p {.*},
                m.name AS manufacturer,
                pl.name AS product_line,
-               collect(DISTINCT i.name) AS industries,
-               tds.url AS tds_url,
-               sds.url AS sds_url
+               collect(DISTINCT i.name) AS industries
         """
         results = await self._graph.execute_read(query, {"sku": product_id})
         if not results:
@@ -179,6 +175,22 @@ class KnowledgeBaseService:
         product["manufacturer"] = row.get("manufacturer")
         product["product_line"] = row.get("product_line")
         product["industries"] = row.get("industries", [])
-        product["tds_url"] = row.get("tds_url")
-        product["sds_url"] = row.get("sds_url")
+
+        # Fetch TDS/SDS URLs from PostgreSQL documents table
+        product["tds_url"] = None
+        product["sds_url"] = None
+        if self._pool:
+            async with self._pool.acquire() as conn:
+                docs = await conn.fetch(
+                    """SELECT doc_type, source_url FROM documents
+                       WHERE file_name = $1 AND is_current = true
+                       ORDER BY created_at DESC""",
+                    product_id,
+                )
+                for doc in docs:
+                    if doc["doc_type"] == "TDS" and not product["tds_url"]:
+                        product["tds_url"] = doc["source_url"]
+                    elif doc["doc_type"] == "SDS" and not product["sds_url"]:
+                        product["sds_url"] = doc["source_url"]
+
         return product

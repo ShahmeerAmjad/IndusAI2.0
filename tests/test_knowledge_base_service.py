@@ -245,8 +245,6 @@ async def test_get_product_found():
         "manufacturer": "Dow",
         "product_line": "POLYOX",
         "industries": ["Adhesives", "Coatings"],
-        "tds_url": "https://example.com/tds.pdf",
-        "sds_url": "https://example.com/sds.pdf",
     }])
     svc = KnowledgeBaseService(None, graph)
 
@@ -256,6 +254,9 @@ async def test_get_product_found():
     assert result["sku"] == "CP-AAA"
     assert result["manufacturer"] == "Dow"
     assert result["industries"] == ["Adhesives", "Coatings"]
+    # With pool=None, TDS/SDS URLs should be None
+    assert result["tds_url"] is None
+    assert result["sds_url"] is None
 
 
 @pytest.mark.asyncio
@@ -281,8 +282,6 @@ async def test_get_product_no_relationships():
         "manufacturer": None,
         "product_line": None,
         "industries": [],
-        "tds_url": None,
-        "sds_url": None,
     }])
     svc = KnowledgeBaseService(None, graph)
 
@@ -291,3 +290,28 @@ async def test_get_product_no_relationships():
     assert result is not None
     assert result["manufacturer"] is None
     assert result["industries"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_product_with_pg_documents():
+    """Verify get_product fetches TDS/SDS URLs from PostgreSQL when pool is available."""
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = AsyncMock()
+    graph.execute_read = AsyncMock(return_value=[{
+        "p": {"name": "POLYOX WSR-301", "sku": "CP-AAA"},
+        "manufacturer": "Dow",
+        "product_line": "POLYOX",
+        "industries": [],
+    }])
+    pool, conn = _make_pool()
+    conn.fetch.return_value = [
+        {"doc_type": "TDS", "source_url": "https://example.com/tds.pdf"},
+        {"doc_type": "SDS", "source_url": "https://example.com/sds.pdf"},
+    ]
+    svc = KnowledgeBaseService(pool, graph)
+
+    result = await svc.get_product("CP-AAA")
+
+    assert result["tds_url"] == "https://example.com/tds.pdf"
+    assert result["sds_url"] == "https://example.com/sds.pdf"
