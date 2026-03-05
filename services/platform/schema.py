@@ -546,6 +546,78 @@ CREATE TABLE IF NOT EXISTS sourcing_orders (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Inbound Messages (email, web chat, fax)
+CREATE TABLE IF NOT EXISTS inbound_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    channel VARCHAR(20) NOT NULL DEFAULT 'email',
+    from_address TEXT NOT NULL,
+    to_address TEXT,
+    subject TEXT,
+    body TEXT NOT NULL,
+    raw_payload JSONB,
+    attachments JSONB,
+    intents JSONB,
+    status VARCHAR(20) DEFAULT 'new',
+    assigned_to UUID,
+    ai_draft_response TEXT,
+    ai_confidence FLOAT,
+    ai_suggested_attachments JSONB,
+    conversation_id UUID,
+    customer_account_id UUID,
+    thread_id TEXT,
+    reviewed_by UUID,
+    reviewed_at TIMESTAMPTZ,
+    sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Customer Accounts
+CREATE TABLE IF NOT EXISTS customer_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    fax_number TEXT,
+    company TEXT,
+    account_number TEXT UNIQUE,
+    erp_customer_id TEXT,
+    pricing_tier VARCHAR(20) DEFAULT 'standard',
+    payment_terms VARCHAR(50) DEFAULT 'NET30',
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TDS/SDS Document Storage
+CREATE TABLE IF NOT EXISTS documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID,
+    doc_type VARCHAR(10) NOT NULL,
+    file_path TEXT NOT NULL,
+    file_name TEXT,
+    file_size_bytes INTEGER,
+    mime_type VARCHAR(50),
+    extracted_text TEXT,
+    structured_data JSONB,
+    source_url TEXT,
+    revision_date DATE,
+    is_current BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Classification Feedback (trainable classifier)
+CREATE TABLE IF NOT EXISTS classification_feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id UUID REFERENCES inbound_messages(id) ON DELETE CASCADE,
+    ai_intent VARCHAR(30),
+    ai_confidence FLOAT,
+    human_intent VARCHAR(30),
+    text_excerpt TEXT,
+    is_correct BOOLEAN,
+    corrected_by UUID,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 """
 
 PLATFORM_INDEXES = """
@@ -636,6 +708,24 @@ CREATE INDEX IF NOT EXISTS idx_rfq_requests_org ON rfq_requests(buyer_org_id);
 CREATE INDEX IF NOT EXISTS idx_rfq_responses_rfq ON rfq_responses(rfq_id);
 CREATE INDEX IF NOT EXISTS idx_sourcing_orders_org ON sourcing_orders(buyer_org_id);
 CREATE INDEX IF NOT EXISTS idx_sourcing_orders_user ON sourcing_orders(user_id);
+
+-- Inbound Messages
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_status ON inbound_messages(status);
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_channel ON inbound_messages(channel);
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_created ON inbound_messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_customer ON inbound_messages(customer_account_id);
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_thread ON inbound_messages(thread_id);
+
+-- Customer Accounts
+CREATE INDEX IF NOT EXISTS idx_customer_accounts_email ON customer_accounts(email);
+CREATE INDEX IF NOT EXISTS idx_customer_accounts_company ON customer_accounts(company);
+
+-- Documents
+CREATE INDEX IF NOT EXISTS idx_documents_product ON documents(product_id);
+CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(doc_type);
+
+-- Classification Feedback
+CREATE INDEX IF NOT EXISTS idx_classification_feedback_message ON classification_feedback(message_id);
 """
 
 # ── Supplier Sales & Support Automation Tables ──
