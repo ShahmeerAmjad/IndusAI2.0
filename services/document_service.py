@@ -72,6 +72,33 @@ class DocumentService:
             )
         return [dict(r) for r in rows]
 
+    async def get_document_by_id(self, doc_id: str) -> dict | None:
+        """Get a single document by ID."""
+        async with self._db.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM documents WHERE id = $1", doc_id,
+            )
+        return dict(row) if row else None
+
+    async def search_documents(self, query: str, doc_type: str | None = None,
+                               limit: int = 20) -> list[dict]:
+        """Search documents by keyword in file_name or product_id."""
+        conditions = ["(file_name ILIKE $1 OR product_id ILIKE $1)"]
+        params = [f"%{query}%"]
+        idx = 2
+        if doc_type:
+            conditions.append(f"doc_type = ${idx}")
+            params.append(doc_type)
+            idx += 1
+        params.append(limit)
+        sql = f"""SELECT id, product_id, doc_type, file_name, is_current, created_at
+                  FROM documents
+                  WHERE {' AND '.join(conditions)}
+                  ORDER BY created_at DESC LIMIT ${idx}"""
+        async with self._db.pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+        return [dict(r) for r in rows]
+
     async def extract_text_from_pdf(self, file_bytes: bytes) -> str:
         """Extract text from PDF bytes using pdfplumber."""
         import pdfplumber

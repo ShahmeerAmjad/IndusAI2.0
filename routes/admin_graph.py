@@ -1,6 +1,7 @@
-"""Admin debug API — graph stats, seller freshness, sourcing logs, reliability."""
+"""Admin debug API — graph stats, seller freshness, sourcing logs, reliability, seed pipeline."""
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from routes.auth import get_current_user
 
@@ -9,12 +10,18 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 # Set by main.py
 _graph_service = None
 _db = None
+_seed_pipeline = None
 
 
 def set_admin_services(graph_service, db_manager):
     global _graph_service, _db
     _graph_service = graph_service
     _db = db_manager
+
+
+def set_seed_pipeline(pipeline):
+    global _seed_pipeline
+    _seed_pipeline = pipeline
 
 
 def _require_admin(user=Depends(get_current_user)):
@@ -166,3 +173,22 @@ async def recent_orders(user=Depends(_require_admin)):
         }
         for r in rows
     ]
+
+
+class SeedChempointRequest(BaseModel):
+    url: str
+    mode: str = "product"  # "product" or "industry"
+
+
+@router.post("/seed-chempoint")
+async def seed_chempoint(body: SeedChempointRequest, user=Depends(_require_admin)):
+    """Scrape a Chempoint page and populate the knowledge graph."""
+    if not _seed_pipeline:
+        raise HTTPException(status_code=503, detail="Seed pipeline not configured")
+
+    if body.mode == "industry":
+        stats = await _seed_pipeline.seed_from_industry(body.url)
+    else:
+        stats = await _seed_pipeline.seed_from_url(body.url)
+
+    return {"status": "ok", "stats": stats}

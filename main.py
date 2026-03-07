@@ -710,6 +710,11 @@ async def lifespan(app: FastAPI):
         token = create_admin_token("admin")
         logger.info(f"Dev admin token: {token}")
 
+        # Seed inbox with sample messages in debug mode
+        if db_manager.pool:
+            from services.platform.seed_inbox import seed_inbox_messages
+            await seed_inbox_messages(db_manager.pool)
+
     yield
 
     logger.info(f"Shutting down {settings.app_name}")

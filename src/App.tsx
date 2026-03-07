@@ -21,6 +21,9 @@ const Login = lazy(() => import("@/pages/Login"));
 const Signup = lazy(() => import("@/pages/Signup"));
 const AdminDebug = lazy(() => import("@/pages/AdminDebug"));
 const BulkImport = lazy(() => import("@/pages/BulkImport"));
+const InboxPage = lazy(() => import("@/pages/Inbox"));
+const MessageDetail = lazy(() => import("@/pages/MessageDetail"));
+const KnowledgeBase = lazy(() => import("@/pages/KnowledgeBase"));
 
 function PageLoader() {
   return (
@@ -74,6 +77,9 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
+              <Route path="/inbox" element={<Suspense fallback={<PageLoader />}><InboxPage /></Suspense>} />
+              <Route path="/inbox/:id" element={<Suspense fallback={<PageLoader />}><MessageDetail /></Suspense>} />
+              <Route path="/knowledge-base" element={<Suspense fallback={<PageLoader />}><KnowledgeBase /></Suspense>} />
               <Route path="/products" element={<Suspense fallback={<PageLoader />}><Products /></Suspense>} />
               <Route path="/products/:id" element={<Suspense fallback={<PageLoader />}><ProductDetail /></Suspense>} />
               <Route path="/inventory" element={<Suspense fallback={<PageLoader />}><Inventory /></Suspense>} />
@@ -91,7 +97,7 @@ export default function App() {
           </Route>
 
           {/* Catch-all */}
-          <Route path="*" element={<Navigate to="/landing" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
         <Toaster position="top-right" richColors />
       </AuthProvider>

@@ -40,6 +40,7 @@ class EmailIngestionService:
         attachment_dir="data/email_attachments",
         max_messages_per_poll=50,
         redis_client=None,
+        post_ingest_callback=None,
     ):
         self._db = db_manager
         self._connector = connector
@@ -50,6 +51,11 @@ class EmailIngestionService:
         self._attachment_dir = attachment_dir
         self._max_per_poll = max_messages_per_poll
         self._redis = redis_client
+        self._post_ingest_callback = post_ingest_callback
+
+    def set_post_ingest_callback(self, callback):
+        """Set callback invoked after each message is stored. Signature: async fn(message_id, body)."""
+        self._post_ingest_callback = callback
 
     async def poll_all_inboxes(self) -> dict:
         """APScheduler entry point: poll every active inbox."""
@@ -205,6 +211,13 @@ class EmailIngestionService:
 
         # Mark in Redis
         await self._mark_processed(gmail_id)
+
+        # Post-ingest: auto-classify and generate AI draft (fire-and-forget)
+        if self._post_ingest_callback:
+            try:
+                await self._post_ingest_callback(message_id, redacted_body)
+            except Exception as e:
+                self._log.warning("Post-ingest callback failed for %s (non-fatal): %s", message_id, e)
 
         return True
 

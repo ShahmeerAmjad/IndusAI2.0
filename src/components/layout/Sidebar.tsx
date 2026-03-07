@@ -1,57 +1,32 @@
 import { NavLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 import {
   LayoutDashboard,
   Package,
   Warehouse,
   ClipboardList,
   MessageSquareQuote,
-  Truck,
   Receipt,
   RotateCcw,
   Bot,
-  Radio,
   Bug,
   Upload,
   ChevronsLeft,
   ChevronsRight,
+  Inbox,
+  BookOpen,
+  Users,
+  FileText,
+  Settings,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface NavSection {
   label: string;
-  items: Array<{ to: string; label: string; icon: LucideIcon }>;
+  items: Array<{ to: string; label: string; icon: LucideIcon; badge?: number }>;
 }
-
-const NAV_SECTIONS: NavSection[] = [
-  {
-    label: "Back-Office",
-    items: [
-      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { to: "/products", label: "Products", icon: Package },
-      { to: "/inventory", label: "Inventory", icon: Warehouse },
-      { to: "/orders", label: "Orders", icon: ClipboardList },
-      { to: "/quotes", label: "Quotes", icon: MessageSquareQuote },
-      { to: "/procurement", label: "Procurement", icon: Truck },
-      { to: "/invoices", label: "Invoicing", icon: Receipt },
-      { to: "/rma", label: "Returns", icon: RotateCcw },
-    ],
-  },
-  {
-    label: "Front-Office",
-    items: [
-      { to: "/channels", label: "Channels", icon: Radio },
-      { to: "/chat", label: "AI Assistant", icon: Bot },
-    ],
-  },
-  {
-    label: "Admin",
-    items: [
-      { to: "/bulk-import", label: "Bulk Import", icon: Upload },
-      { to: "/admin", label: "Debug View", icon: Bug },
-    ],
-  },
-];
 
 interface SidebarProps {
   collapsed?: boolean;
@@ -59,6 +34,50 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
+  // Poll inbox stats for unread count badge
+  const { data: stats } = useQuery({
+    queryKey: ["inbox-stats"],
+    queryFn: api.getInboxStats,
+    refetchInterval: 15_000,
+  });
+
+  const newCount = stats?.by_status?.find((s) => s.status === "new")?.count ?? 0;
+
+  const NAV_SECTIONS: NavSection[] = [
+    {
+      label: "Primary",
+      items: [
+        { to: "/inbox", label: "Inbox", icon: Inbox, badge: newCount || undefined },
+        { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      ],
+    },
+    {
+      label: "Products",
+      items: [
+        { to: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
+        { to: "/products", label: "Product Catalog", icon: Package },
+      ],
+    },
+    {
+      label: "Operations",
+      items: [
+        { to: "/orders", label: "Orders", icon: ClipboardList },
+        { to: "/quotes", label: "Quotes", icon: MessageSquareQuote },
+        { to: "/inventory", label: "Inventory", icon: Warehouse },
+        { to: "/invoices", label: "Invoicing", icon: Receipt },
+        { to: "/rma", label: "Returns", icon: RotateCcw },
+      ],
+    },
+    {
+      label: "Settings",
+      items: [
+        { to: "/chat", label: "AI Assistant", icon: Bot },
+        { to: "/bulk-import", label: "Bulk Import", icon: Upload },
+        { to: "/admin", label: "Admin Debug", icon: Bug },
+      ],
+    },
+  ];
+
   return (
     <aside
       className={cn(
@@ -106,7 +125,19 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
                   }
                 >
                   <item.icon className="h-[18px] w-[18px] shrink-0" />
-                  {!collapsed && item.label}
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1">{item.label}</span>
+                      {item.badge != null && item.badge > 0 && (
+                        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                          {item.badge > 99 ? "99+" : item.badge}
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {collapsed && item.badge != null && item.badge > 0 && (
+                    <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
+                  )}
                 </NavLink>
               ))}
             </div>
@@ -126,8 +157,8 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       {/* Footer */}
       {!collapsed && (
         <div className="border-t border-white/10 px-5 py-3">
-          <p className="text-[10px] text-slate-500">AI-Powered MRO Platform</p>
-          <p className="text-[10px] text-slate-600">Built for Industrial Distribution</p>
+          <p className="text-[10px] text-slate-500">Supplier Sales Automation</p>
+          <p className="text-[10px] text-slate-600">AI-Powered Customer Support</p>
         </div>
       )}
     </aside>

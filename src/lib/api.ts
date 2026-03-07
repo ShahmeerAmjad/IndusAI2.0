@@ -314,6 +314,73 @@ export interface Location {
   lng: number | null;
 }
 
+// ---------- Inbox / Supplier Sales Types ----------
+
+export interface InboxMessage {
+  id: string;
+  from_address: string;
+  subject: string;
+  body?: string;
+  status: string;
+  channel: string;
+  intents: string | null;
+  ai_draft_response?: string | null;
+  ai_confidence?: number | null;
+  assigned_to?: string | null;
+  customer_account_id?: string | null;
+  created_at: string;
+}
+
+export interface InboxListResponse {
+  messages: InboxMessage[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface InboxFilters {
+  status?: string;
+  channel?: string;
+  intent?: string;
+  assigned_to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface InboxStats {
+  total: number;
+  by_status: Array<{ status: string; count: number }>;
+  by_intent: Array<{ intent: string; count: number }>;
+}
+
+export interface ClassificationFeedback {
+  original_intent: string;
+  corrected_intent: string;
+  notes?: string;
+}
+
+export interface CustomerAccount {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  account_number?: string;
+  pricing_tier?: string;
+  payment_terms?: string;
+  created_at?: string;
+}
+
+export interface DocumentMeta {
+  id: string;
+  product_id?: string;
+  doc_type: string;
+  file_name: string;
+  file_path?: string;
+  is_current?: boolean;
+  created_at?: string;
+}
+
 // ---------- API Functions ----------
 
 export const api = {
@@ -417,4 +484,38 @@ export const api = {
   adminRecentSourcing: () => authRequest<unknown>("/admin/sourcing/recent"),
   adminReliabilityScores: () => authRequest<unknown>("/admin/reliability/scores"),
   adminRecentOrders: () => authRequest<unknown>("/admin/orders/recent"),
+
+  // Inbox (Supplier Sales)
+  getInboxMessages: (filters?: InboxFilters) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.channel) params.set("channel", filters.channel);
+    if (filters?.intent) params.set("intent", filters.intent);
+    if (filters?.assigned_to) params.set("assigned_to", filters.assigned_to);
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    if (filters?.offset) params.set("offset", String(filters.offset));
+    const qs = params.toString();
+    return get<InboxListResponse>(`/inbox/messages${qs ? `?${qs}` : ""}`);
+  },
+  getInboxMessage: (id: string) => get<InboxMessage>(`/inbox/messages/${id}`),
+  classifyMessage: (id: string) => patch<unknown>(`/inbox/messages/${id}/classify`),
+  approveMessage: (id: string) => patch<unknown>(`/inbox/messages/${id}/approve`),
+  escalateMessage: (id: string, assignedTo?: string) =>
+    patch<unknown>(`/inbox/messages/${id}/escalate${assignedTo ? `?assigned_to=${encodeURIComponent(assignedTo)}` : ""}`),
+  updateDraft: (id: string, responseText: string) =>
+    patch<unknown>(`/inbox/messages/${id}/draft`, { response_text: responseText }),
+  submitFeedback: (id: string, feedback: ClassificationFeedback) =>
+    post<unknown>(`/inbox/messages/${id}/feedback`, feedback),
+  getInboxStats: () => get<InboxStats>("/inbox/messages/stats"),
+
+  // Documents
+  getDocumentsForProduct: (productId: string) => get<DocumentMeta[]>(`/documents/product/${productId}`),
+  searchDocuments: (q: string, docType?: string) =>
+    get<DocumentMeta[]>(`/documents/search?q=${encodeURIComponent(q)}${docType ? `&doc_type=${docType}` : ""}`),
+
+  // Customer Accounts
+  getCustomerAccounts: (limit = 50, offset = 0) =>
+    get<{ accounts: CustomerAccount[]; limit: number; offset: number }>(`/customer-accounts?limit=${limit}&offset=${offset}`),
+  getCustomerAccount: (id: string) => get<CustomerAccount>(`/customer-accounts/${id}`),
+  lookupCustomerByEmail: (email: string) => get<CustomerAccount>(`/customer-accounts/lookup?email=${encodeURIComponent(email)}`),
 };

@@ -37,6 +37,13 @@ class FeedbackRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class SimulateRequest(BaseModel):
+    from_address: str = "demo@customer.com"
+    subject: str = "Customer inquiry"
+    body: str
+    channel: str = "email"
+
+
 # ── Endpoints ──
 
 
@@ -246,3 +253,54 @@ async def submit_feedback(message_id: str, body: FeedbackRequest):
             message_id, body.original_intent, body.corrected_intent, body.notes,
         )
     return {"message_id": message_id, "feedback_recorded": True}
+
+
+@router.post("/messages/simulate")
+async def simulate_inbound(req: SimulateRequest):
+    """Simulate an inbound message — classify, draft, and store."""
+    if not _db or not _db.pool:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    # Classify
+    intents_data = []
+    if _classifier:
+        result = await _classifier.classify(req.body)
+        intents_data = [
+            {"intent": r.intent.value, "confidence": r.confidence, "text_span": r.text_span}
+            for r in result.intents
+        ]
+    intents_json = json.dumps(intents_data)
+
+    # Generate AI draft
+    ai_draft = None
+    ai_confidence = None
+    if _response_engine and _classifier and result.intents:
+        try:
+            draft = await _response_engine.generate_draft(
+                req.body, result, customer_account=None,
+            )
+            ai_draft = draft["response_text"]
+            ai_confidence = draft["confidence"]
+        except Exception as exc:
+            logger.warning("Draft generation failed for simulated message: %s", exc)
+
+    status = "draft_ready" if ai_draft else ("classified" if intents_data else "new")
+
+    async with _db.pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO inbound_messages
+               (channel, from_address, subject, body, intents, status,
+                ai_draft_response, ai_confidence)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+               RETURNING id""",
+            req.channel, req.from_address, req.subject, req.body,
+            intents_json, status, ai_draft, ai_confidence,
+        )
+
+    return {
+        "message_id": str(row["id"]) if row else None,
+        "intents": intents_data,
+        "status": status,
+        "ai_draft": ai_draft,
+        "ai_confidence": ai_confidence,
+    }

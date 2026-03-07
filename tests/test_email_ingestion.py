@@ -286,3 +286,53 @@ class TestEmailIngestionService:
 
         result = await service.poll_all_inboxes()
         assert result["messages"] == 1
+
+    @pytest.mark.asyncio
+    async def test_post_ingest_callback(self, mock_db, mock_connector, mock_parser, mock_pii, mock_encryption, mock_redis):
+        """Post-ingest callback is invoked after message storage."""
+        db, conn = mock_db
+        conn.fetch = AsyncMock(return_value=[
+            {"inbox_address": "inbox@test.com", "history_id": None, "last_polled_at": None},
+        ])
+        mock_connector.list_new_messages = AsyncMock(return_value=[{"id": "gmail_cb"}])
+
+        callback = AsyncMock()
+        svc = EmailIngestionService(
+            db_manager=db, connector=mock_connector, parser=mock_parser,
+            pii_scanner=mock_pii, encryption=mock_encryption,
+            redis_client=mock_redis, post_ingest_callback=callback,
+        )
+
+        result = await svc.poll_all_inboxes()
+        assert result["messages"] == 1
+        callback.assert_called_once()
+        args = callback.call_args[0]
+        assert len(args[0]) == 36  # UUID format
+        assert isinstance(args[1], str)
+
+    @pytest.mark.asyncio
+    async def test_post_ingest_callback_error_nonfatal(self, mock_db, mock_connector, mock_parser, mock_pii, mock_encryption, mock_redis):
+        """Post-ingest callback failure doesn't break ingestion."""
+        db, conn = mock_db
+        conn.fetch = AsyncMock(return_value=[
+            {"inbox_address": "inbox@test.com", "history_id": None, "last_polled_at": None},
+        ])
+        mock_connector.list_new_messages = AsyncMock(return_value=[{"id": "gmail_err"}])
+
+        callback = AsyncMock(side_effect=Exception("classify failed"))
+        svc = EmailIngestionService(
+            db_manager=db, connector=mock_connector, parser=mock_parser,
+            pii_scanner=mock_pii, encryption=mock_encryption,
+            redis_client=mock_redis, post_ingest_callback=callback,
+        )
+
+        result = await svc.poll_all_inboxes()
+        assert result["messages"] == 1  # Message still counts as ingested
+        callback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_set_post_ingest_callback(self, service):
+        """set_post_ingest_callback wires a callback after construction."""
+        callback = AsyncMock()
+        service.set_post_ingest_callback(callback)
+        assert service._post_ingest_callback is callback

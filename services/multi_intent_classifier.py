@@ -112,9 +112,10 @@ Email:
 class MultiIntentClassifier:
     """Classify customer emails into one or more intents."""
 
-    def __init__(self, llm_router=None):
+    def __init__(self, llm_router=None, feedback_service=None):
         self._llm = llm_router
         self._entity_extractor = EntityExtractor()
+        self._feedback = feedback_service
 
     def classify_patterns(self, text: str) -> MultiIntentResult:
         """Synchronous pattern-based classification.
@@ -180,8 +181,26 @@ class MultiIntentClassifier:
         return result
 
     async def _classify_llm(self, text: str) -> MultiIntentResult:
-        """Call LLM for intent classification."""
-        messages = [{"role": "user", "content": _LLM_PROMPT + text}]
+        """Call LLM for intent classification, with few-shot examples if available."""
+        # Prepend few-shot examples from feedback service
+        few_shot_block = ""
+        if self._feedback:
+            try:
+                # Get examples from most common intents
+                all_examples = []
+                for intent_type in IntentType:
+                    examples = await self._feedback.get_few_shot_examples(intent_type.value, limit=2)
+                    all_examples.extend(examples)
+                if all_examples:
+                    lines = ["Here are some correctly classified examples:"]
+                    for ex in all_examples[:10]:  # Cap at 10 examples
+                        lines.append(f'- Intent: {ex["intent"]}, Text: "{ex["text"]}"')
+                    few_shot_block = "\n".join(lines) + "\n\nNow classify this email:\n"
+            except Exception as exc:
+                logger.debug("Few-shot example retrieval failed: %s", exc)
+
+        prompt = _LLM_PROMPT if not few_shot_block else _LLM_PROMPT.replace("Email:\n", few_shot_block)
+        messages = [{"role": "user", "content": prompt + text}]
         raw = await self._llm.chat(
             messages,
             task="intent_classification",
