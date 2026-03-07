@@ -1,330 +1,104 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, DashboardMetrics } from "@/lib/api";
-import { formatCurrency, formatNumber, statusColor, cn } from "@/lib/utils";
+import { api, type InboxStats, type DashboardMetrics } from "@/lib/api";
+import { formatCurrency, formatNumber, cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { Link } from "react-router-dom";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  CartesianGrid,
-  PieChart,
-  Pie,
-  Cell,
-  Area,
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import {
-  DollarSign,
-  Package,
-  ClipboardList,
-  TrendingUp,
-  AlertTriangle,
-  FileText,
-  CircleAlert,
-  RotateCcw,
-  Search,
-  Plus,
-  Upload as UploadIcon,
-  Download,
-  Activity,
+  Inbox, Clock, Users, Zap, TrendingUp, FileText, MessageSquare,
+  Activity, ArrowRight,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
+const CHART_COLORS = ["#1e3a8a", "#0284c7", "#0d9488", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
+const PIE_COLORS = ["#1e3a8a", "#0284c7", "#0d9488", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
 
-interface KpiCard {
+interface KpiCardProps {
   label: string;
   value: string;
+  subtext?: string;
   icon: LucideIcon;
-  border: string;           // Tailwind border-l color class
-  bg: string;               // Tailwind background tint class
-  iconBg: string;           // icon circle background
-  iconColor: string;        // icon stroke color
+  color: string;
+  iconBg: string;
 }
 
-interface AlertCard {
-  label: string;
-  value: number;
-  icon: LucideIcon;
-  border: string;
-  textColor: string;
-}
-
-interface TopProduct {
-  sku: string;
-  name: string;
-  total_qty: number;
-  total_revenue: number;
-}
-
-interface TopCustomer {
-  name: string;
-  company: string;
-  total_revenue: number;
-  order_count: number;
-}
-
-interface RecentOrder {
-  order_number: string;
-  status: string;
-  total_amount: number;
-  customer_name: string;
-  order_date: string;
-}
-
-interface ProductChartItem {
-  name: string;
-  revenue: number;
-}
-
-interface CustomerPieItem {
-  name: string;
-  value: number;
-  orders: number;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Palette                                                            */
-/* ------------------------------------------------------------------ */
-
-const CHART_COLORS = [
-  "#1e3a8a", // industrial-800
-  "#0284c7", // industrial-600
-  "#0ea5e9", // industrial-500
-  "#38bdf8", // industrial-400
-  "#7dd3fc", // industrial-300
-  "#0d9488", // tech-600
-  "#14b8a6", // tech-500
-  "#2dd4bf", // tech-400
-];
-
-const PIE_COLORS = ["#1e3a8a", "#0284c7", "#0d9488", "#f59e0b", "#ef4444"];
-
-/* ------------------------------------------------------------------ */
-/*  Custom Tooltip for Recharts                                        */
-/* ------------------------------------------------------------------ */
-
-interface ChartTooltipProps {
-  active?: boolean;
-  payload?: Array<{ value: number; name: string; payload: Record<string, unknown> }>;
-  label?: string;
-  isCurrency?: boolean;
-}
-
-function ChartTooltip({ active, payload, label, isCurrency = true }: ChartTooltipProps) {
-  if (!active || !payload?.length) return null;
+function KpiCard({ label, value, subtext, icon: Icon, color, iconBg }: KpiCardProps) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg">
-      <p className="mb-1 text-xs font-medium text-slate-500">{label}</p>
-      {payload.map((entry, i) => (
-        <p key={i} className="text-sm font-semibold text-slate-800">
-          {isCurrency ? formatCurrency(entry.value) : formatNumber(entry.value)}
-        </p>
-      ))}
+    <div className={cn("rounded-xl border border-slate-200 border-l-4 bg-white p-5 shadow-sm", color)}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
+          {subtext && <p className="mt-1 text-xs text-slate-400">{subtext}</p>}
+        </div>
+        <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", iconBg)}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Sales Trend mini-chart (uses getSalesSummary)                      */
-/* ------------------------------------------------------------------ */
-
-function SalesTrendChart() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["salesSummary", "daily"],
-    queryFn: () => api.getSalesSummary("daily"),
-  });
-
-  if (isLoading || !data) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-slate-400">
-        Loading trend...
-      </div>
-    );
-  }
-
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-        <defs>
-          <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#1e3a8a" stopOpacity={0.15} />
-            <stop offset="100%" stopColor="#1e3a8a" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-        <XAxis
-          dataKey="period"
-          tick={{ fontSize: 11, fill: "#64748b" }}
-          tickLine={false}
-          axisLine={{ stroke: "#e2e8f0" }}
-        />
-        <YAxis
-          tick={{ fontSize: 11, fill: "#64748b" }}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={(v: number) =>
-            v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`
-          }
-        />
-        <Tooltip content={<ChartTooltip />} />
-        <Area
-          type="monotone"
-          dataKey="revenue"
-          stroke="none"
-          fill="url(#revenueGradient)"
-        />
-        <Line
-          type="monotone"
-          dataKey="revenue"
-          stroke="#1e3a8a"
-          strokeWidth={2.5}
-          dot={{ r: 3, fill: "#1e3a8a" }}
-          activeDot={{ r: 5, fill: "#0284c7" }}
-        />
-      </LineChart>
-    </ResponsiveContainer>
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg">
+      {label && <p className="mb-1 text-xs font-medium text-slate-500">{label}</p>}
+      {payload.map((entry, i) => (
+        <p key={i} className="text-sm font-semibold text-slate-800">{formatNumber(entry.value)}</p>
+      ))}
+    </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Main Dashboard Component                                           */
-/* ------------------------------------------------------------------ */
 
 export default function Dashboard() {
   const { user } = useAuth();
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const {
-    data: metrics,
-    isLoading,
-    isError,
-    error,
-  } = useQuery<DashboardMetrics>({
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ["inbox-stats"],
+    queryFn: api.getInboxStats,
+    refetchInterval: 30_000,
+  });
+
+  const { data: metrics } = useQuery<DashboardMetrics>({
     queryKey: ["dashboard"],
     queryFn: api.getDashboard,
     refetchInterval: 60_000,
   });
 
-  /* ---------- Loading & Error States ---------- */
+  // Derived data from inbox stats
+  const totalMessages = stats?.total ?? 0;
+  const byStatus = stats?.by_status ?? [];
+  const byIntent = stats?.by_intent ?? [];
 
-  if (isLoading) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center">
-        <p className="text-lg text-slate-400">Loading...</p>
-      </div>
-    );
-  }
+  const newCount = byStatus.find((s) => s.status === "new")?.count ?? 0;
+  const classifiedCount = byStatus.find((s) => s.status === "classified")?.count ?? 0;
+  const approvedCount = byStatus.find((s) => s.status === "approved")?.count ?? 0;
+  const escalatedCount = byStatus.find((s) => s.status === "escalated")?.count ?? 0;
 
-  if (isError) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center">
-        <p className="text-lg text-red-500">
-          {error instanceof Error ? error.message : "Failed to load dashboard"}
-        </p>
-      </div>
-    );
-  }
+  // AI accuracy estimate (approved / (approved + escalated))
+  const totalResolved = approvedCount + escalatedCount;
+  const aiAccuracy = totalResolved > 0 ? Math.round((approvedCount / totalResolved) * 100) : 0;
 
-  if (!metrics) return null;
+  // Estimated hours saved (approx 5 min per auto-handled message)
+  const hoursSaved = Math.round((approvedCount * 5) / 60);
 
-  /* ---------- Derived data ---------- */
+  // Intent distribution for pie chart
+  const intentPieData = byIntent.map((i) => ({
+    name: formatIntentLabel(i.intent),
+    value: i.count,
+  }));
 
-  const kpiCards: KpiCard[] = [
-    {
-      label: "Revenue Today",
-      value: formatCurrency(metrics.revenue_today),
-      icon: DollarSign,
-      border: "border-l-tech-500",
-      bg: "bg-tech-50/60",
-      iconBg: "bg-tech-100",
-      iconColor: "text-tech-600",
-    },
-    {
-      label: "Orders Today",
-      value: formatNumber(metrics.orders_today),
-      icon: Package,
-      border: "border-l-industrial-600",
-      bg: "bg-industrial-50/60",
-      iconBg: "bg-industrial-100",
-      iconColor: "text-industrial-600",
-    },
-    {
-      label: "Open Orders",
-      value: formatNumber(metrics.open_orders),
-      icon: ClipboardList,
-      border: "border-l-industrial-800",
-      bg: "bg-industrial-50/40",
-      iconBg: "bg-industrial-100",
-      iconColor: "text-industrial-800",
-    },
-    {
-      label: "Revenue This Month",
-      value: formatCurrency(metrics.revenue_this_month),
-      icon: TrendingUp,
-      border: "border-l-tech-600",
-      bg: "bg-tech-50/40",
-      iconBg: "bg-tech-100",
-      iconColor: "text-tech-600",
-    },
-  ];
-
-  const alertCards: AlertCard[] = [
-    {
-      label: "Low Stock Items",
-      value: metrics.low_stock_items,
-      icon: AlertTriangle,
-      border: "border-l-amber-500",
-      textColor: "text-amber-600",
-    },
-    {
-      label: "Pending Invoices",
-      value: metrics.pending_invoices,
-      icon: FileText,
-      border: "border-l-industrial-400",
-      textColor: "text-industrial-600",
-    },
-    {
-      label: "Overdue Invoices",
-      value: metrics.overdue_invoices,
-      icon: CircleAlert,
-      border: "border-l-red-500",
-      textColor: "text-red-600",
-    },
-    {
-      label: "Open RMAs",
-      value: metrics.open_rmas,
-      icon: RotateCcw,
-      border: "border-l-amber-400",
-      textColor: "text-amber-600",
-    },
-  ];
-
-  const topProductsData: ProductChartItem[] = metrics.top_products
-    .slice(0, 8)
-    .map((p: TopProduct) => ({
-      name: p.name.length > 28 ? `${p.name.slice(0, 26)}...` : p.name,
-      revenue: p.total_revenue,
-    }))
-    .reverse(); // reverse so highest is at top in horizontal bar chart
-
-  const topCustomersPieData: CustomerPieItem[] = metrics.top_customers
-    .slice(0, 5)
-    .map((c: TopCustomer) => ({
-      name: c.company || c.name,
-      value: c.total_revenue,
-      orders: c.order_count,
-    }));
-
-  /* ---------- Render ---------- */
+  // Status bar chart data
+  const statusBarData = byStatus.map((s) => ({
+    name: s.status,
+    count: s.count,
+  }));
 
   return (
     <div className="space-y-6">
@@ -351,345 +125,238 @@ export default function Dashboard() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Link to="/chat" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-industrial-300 hover:shadow-md">
+        <Link to="/inbox" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-industrial-300 hover:shadow-md">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-industrial-100 text-industrial-600 transition-colors group-hover:bg-industrial-600 group-hover:text-white">
-            <Search className="h-5 w-5" />
+            <Inbox className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-800">Search Parts</p>
-            <p className="text-[11px] text-slate-400">AI sourcing</p>
+            <p className="text-sm font-semibold text-slate-800">Inbox</p>
+            <p className="text-[11px] text-slate-400">{newCount} new messages</p>
+          </div>
+        </Link>
+        <Link to="/knowledge-base" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-purple-300 hover:shadow-md">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600 transition-colors group-hover:bg-purple-600 group-hover:text-white">
+            <FileText className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Knowledge Base</p>
+            <p className="text-[11px] text-slate-400">Products & TDS/SDS</p>
           </div>
         </Link>
         <Link to="/orders" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-tech-300 hover:shadow-md">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-tech-100 text-tech-600 transition-colors group-hover:bg-tech-600 group-hover:text-white">
-            <Plus className="h-5 w-5" />
+            <TrendingUp className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-800">Create Order</p>
-            <p className="text-[11px] text-slate-400">New O2C order</p>
+            <p className="text-sm font-semibold text-slate-800">Orders</p>
+            <p className="text-[11px] text-slate-400">{metrics?.open_orders ?? 0} open</p>
           </div>
         </Link>
-        <Link to="/bulk-import" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-amber-300 hover:shadow-md">
+        <Link to="/chat" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-amber-300 hover:shadow-md">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-600 transition-colors group-hover:bg-amber-600 group-hover:text-white">
-            <UploadIcon className="h-5 w-5" />
+            <MessageSquare className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-800">Import Data</p>
-            <p className="text-[11px] text-slate-400">CSV upload</p>
-          </div>
-        </Link>
-        <Link to="/inventory" className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-purple-300 hover:shadow-md">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600 transition-colors group-hover:bg-purple-600 group-hover:text-white">
-            <Download className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-800">Download Report</p>
-            <p className="text-[11px] text-slate-400">Inventory export</p>
+            <p className="text-sm font-semibold text-slate-800">AI Assistant</p>
+            <p className="text-[11px] text-slate-400">Sourcing chat</p>
           </div>
         </Link>
       </div>
 
-      {/* ---- Row 1: KPI Cards ---- */}
+      {/* KPI Row 1: Operations Impact */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpiCards.map((card) => (
-          <div
-            key={card.label}
-            className={cn(
-              "relative overflow-hidden rounded-xl border border-slate-200 border-l-4 p-5 shadow-sm transition-shadow hover:shadow-md",
-              card.border,
-              card.bg,
-            )}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  {card.label}
-                </p>
-                <p className="mt-2 text-3xl font-bold text-slate-900">
-                  {card.value}
-                </p>
-              </div>
-              <div
-                className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-lg",
-                  card.iconBg,
-                )}
-              >
-                <card.icon className={cn("h-5 w-5", card.iconColor)} />
-              </div>
-            </div>
-          </div>
-        ))}
+        <KpiCard
+          label="Messages Handled"
+          value={formatNumber(totalMessages)}
+          subtext={`${newCount} pending review`}
+          icon={Inbox}
+          color="border-l-industrial-600"
+          iconBg="bg-industrial-100 text-industrial-600"
+        />
+        <KpiCard
+          label="AI Accuracy"
+          value={`${aiAccuracy}%`}
+          subtext={`${approvedCount} approved, ${escalatedCount} escalated`}
+          icon={Zap}
+          color="border-l-tech-500"
+          iconBg="bg-tech-100 text-tech-600"
+        />
+        <KpiCard
+          label="Hours Saved"
+          value={`${hoursSaved}h`}
+          subtext={`~${Math.round(hoursSaved / 160 * 10) / 10} FTE equivalent`}
+          icon={Clock}
+          color="border-l-amber-500"
+          iconBg="bg-amber-100 text-amber-600"
+        />
+        <KpiCard
+          label="Auto-Approved"
+          value={formatNumber(approvedCount)}
+          subtext="AI drafts sent with human approval"
+          icon={Users}
+          color="border-l-green-500"
+          iconBg="bg-green-100 text-green-600"
+        />
       </div>
 
-      {/* ---- Row 2: Alert / Metric Cards ---- */}
+      {/* KPI Row 2: Pipeline stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {alertCards.map((card) => (
-          <div
-            key={card.label}
-            className={cn(
-              "rounded-lg border border-slate-200 border-l-4 bg-white px-4 py-3 shadow-sm",
-              card.border,
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <card.icon className={cn("h-4 w-4", card.textColor)} />
-              <span className="text-xs font-medium text-slate-500">
-                {card.label}
-              </span>
-            </div>
-            <p className={cn("mt-1 text-2xl font-bold", card.textColor)}>
-              {formatNumber(card.value)}
-            </p>
+        {byStatus.map((s) => (
+          <div key={s.status} className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <span className="text-xs font-medium capitalize text-slate-500">{s.status}</span>
+            <p className="mt-1 text-2xl font-bold text-slate-800">{formatNumber(s.count)}</p>
           </div>
         ))}
       </div>
 
-      {/* ---- Row 3: Charts ---- */}
+      {/* Charts Row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Top Products Bar Chart */}
+        {/* Intent Distribution Pie */}
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-700">
-            Top Products by Revenue
+            Intent Distribution
           </h2>
-          <div className="h-[320px]">
-            {topProductsData.length > 0 ? (
+          <div className="h-[300px]">
+            {intentPieData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={topProductsData}
-                  layout="vertical"
-                  margin={{ top: 0, right: 20, left: 10, bottom: 0 }}
-                >
+                <PieChart>
+                  <Pie
+                    data={intentPieData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={110}
+                    paddingAngle={2}
+                    strokeWidth={0}
+                  >
+                    {intentPieData.map((_e, idx) => (
+                      <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                No intent data yet
+              </div>
+            )}
+          </div>
+          {/* Legend */}
+          <div className="mt-2 flex flex-wrap justify-center gap-3">
+            {intentPieData.map((d, idx) => (
+              <div key={d.name} className="flex items-center gap-1.5 text-xs text-slate-600">
+                <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                {d.name} ({d.value})
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Volume by Status Bar */}
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-700">
+            Messages by Status
+          </h2>
+          <div className="h-[300px]">
+            {statusBarData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statusBarData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis
-                    type="number"
+                    dataKey="name"
                     tick={{ fontSize: 11, fill: "#64748b" }}
                     tickLine={false}
                     axisLine={{ stroke: "#e2e8f0" }}
-                    tickFormatter={(v: number) =>
-                      v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`
-                    }
                   />
                   <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={140}
-                    tick={{ fontSize: 11, fill: "#334155" }}
+                    tick={{ fontSize: 11, fill: "#64748b" }}
                     tickLine={false}
                     axisLine={false}
                   />
                   <Tooltip content={<ChartTooltip />} />
-                  <Bar
-                    dataKey="revenue"
-                    radius={[0, 4, 4, 0]}
-                    barSize={22}
-                  >
-                    {topProductsData.map((_entry: ProductChartItem, idx: number) => (
-                      <Cell
-                        key={idx}
-                        fill={CHART_COLORS[idx % CHART_COLORS.length]}
-                      />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={40}>
+                    {statusBarData.map((_e, idx) => (
+                      <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-slate-400">
-                No product data available
+                No message data yet
               </div>
             )}
           </div>
         </div>
-
-        {/* Sales Trend Line Chart */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-700">
-            Revenue Trend (Daily)
-          </h2>
-          <div className="h-[320px]">
-            <SalesTrendChart />
-          </div>
-        </div>
       </div>
 
-      {/* ---- Row 4: Recent Orders Table + Top Customers ---- */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Recent Orders - spans 2 cols */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm lg:col-span-2">
-          <div className="border-b border-slate-100 px-5 py-4">
+      {/* Bottom: Intent breakdown table */}
+      {byIntent.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-700">
-              Recent Orders
+              Intent Breakdown
             </h2>
+            <Link
+              to="/inbox"
+              className="flex items-center gap-1 text-xs font-medium text-industrial-600 hover:underline"
+            >
+              View Inbox <ArrowRight size={12} />
+            </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80">
-                  <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Order #
-                  </th>
-                  <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Customer
-                  </th>
-                  <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Status
-                  </th>
-                  <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Amount
-                  </th>
-                  <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Date
-                  </th>
+                  <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Intent</th>
+                  <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Count</th>
+                  <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Distribution</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {metrics.recent_orders.length > 0 ? (
-                  metrics.recent_orders.map((order: RecentOrder) => (
-                    <tr
-                      key={order.order_number}
-                      className="transition-colors hover:bg-slate-50/60"
-                    >
-                      <td className="whitespace-nowrap px-5 py-3 font-mono text-sm font-medium text-industrial-800">
-                        {order.order_number}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3 text-slate-700">
-                        {order.customer_name}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize",
-                            statusColor(order.status),
-                          )}
-                        >
-                          {order.status.replace(/_/g, " ")}
+                {byIntent.map((i, idx) => (
+                  <tr key={i.intent} className="transition-colors hover:bg-slate-50/60">
+                    <td className="whitespace-nowrap px-5 py-3 font-medium text-slate-800">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                        {formatIntentLabel(i.intent)}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3 text-right font-medium text-slate-900">
+                      {formatNumber(i.count)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${totalMessages > 0 ? Math.round((i.count / totalMessages) * 100) : 0}%`,
+                              backgroundColor: PIE_COLORS[idx % PIE_COLORS.length],
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs text-slate-400">
+                          {totalMessages > 0 ? Math.round((i.count / totalMessages) * 100) : 0}%
                         </span>
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3 text-right font-medium text-slate-900">
-                        {formatCurrency(order.total_amount)}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3 text-slate-500">
-                        {new Date(order.order_date).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-5 py-8 text-center text-slate-400"
-                    >
-                      No recent orders
+                      </div>
                     </td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         </div>
-
-        {/* Top Customers */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-700">
-              Top Customers by Revenue
-            </h2>
-          </div>
-
-          {/* Pie Chart */}
-          {topCustomersPieData.length > 0 && (
-            <div className="flex justify-center px-4 pt-4">
-              <div className="h-[180px] w-[180px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={topCustomersPieData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={80}
-                      paddingAngle={2}
-                      strokeWidth={0}
-                    >
-                      {topCustomersPieData.map((_entry: CustomerPieItem, idx: number) => (
-                        <Cell
-                          key={idx}
-                          fill={PIE_COLORS[idx % PIE_COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      content={(props) => {
-                        const { active, payload } = props as { active?: boolean; payload?: Array<{ payload: CustomerPieItem }> };
-                        if (!active || !payload?.length) return null;
-                        const d: CustomerPieItem = payload[0].payload;
-                        return (
-                          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg">
-                            <p className="text-xs font-medium text-slate-500">
-                              {d.name}
-                            </p>
-                            <p className="text-sm font-semibold text-slate-800">
-                              {formatCurrency(d.value)}
-                            </p>
-                            <p className="text-xs text-slate-400">
-                              {d.orders} orders
-                            </p>
-                          </div>
-                        );
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {/* Customer List */}
-          <div className="divide-y divide-slate-100 px-5 pb-3">
-            {metrics.top_customers.slice(0, 5).map((c: TopCustomer, idx: number) => (
-              <div
-                key={c.name + c.company}
-                className="flex items-center gap-3 py-3"
-              >
-                {/* Rank badge */}
-                <div
-                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                  style={{
-                    backgroundColor:
-                      PIE_COLORS[idx % PIE_COLORS.length],
-                  }}
-                >
-                  {idx + 1}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800">
-                    {c.company || c.name}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {c.order_count} orders
-                  </p>
-                </div>
-
-                <p className="flex-shrink-0 text-sm font-semibold text-slate-900">
-                  {formatCurrency(c.total_revenue)}
-                </p>
-              </div>
-            ))}
-
-            {metrics.top_customers.length === 0 && (
-              <p className="py-6 text-center text-sm text-slate-400">
-                No customer data available
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
+}
+
+function formatIntentLabel(intent: string): string {
+  return intent
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }

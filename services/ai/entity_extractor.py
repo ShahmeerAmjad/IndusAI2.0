@@ -37,6 +37,9 @@ ORDER_PATTERNS = [
     re.compile(r'\b(?:ORD|INV)[-\s]?(\d{3,10})\b', re.I),
 ]
 
+# CAS registry number pattern (e.g. 7732-18-5 for water)
+CAS_PATTERN = re.compile(r'\b\d{2,7}-\d{2}-\d\b')
+
 
 class EntityExtractor:
     """Extract structured entities from customer messages."""
@@ -46,15 +49,22 @@ class EntityExtractor:
         part_numbers = self._extract_part_numbers(message)
         quantities = self._extract_quantities(message, part_numbers)
         order_numbers = self._extract_order_numbers(message)
+        cas_numbers = self._extract_cas_numbers(message)
+
+        # Separate PO numbers from generic order numbers
+        po_numbers = [o for o in order_numbers if o.upper().startswith("PO")]
 
         return EntityResult(
             part_numbers=part_numbers,
             quantities=quantities,
             order_numbers=order_numbers,
+            cas_numbers=cas_numbers,
+            po_numbers=po_numbers,
             raw_entities={
                 "part_count": len(part_numbers),
                 "has_quantities": bool(quantities),
                 "has_orders": bool(order_numbers),
+                "has_cas": bool(cas_numbers),
             },
         )
 
@@ -107,3 +117,14 @@ class EntityExtractor:
                     seen.add(order_num.upper())
                     orders.append(order_num)
         return orders
+
+    def _extract_cas_numbers(self, message: str) -> list[str]:
+        """Extract CAS registry numbers (e.g. 7732-18-5) from message."""
+        found = []
+        seen = set()
+        for match in CAS_PATTERN.finditer(message):
+            cas = match.group(0)
+            if cas not in seen:
+                seen.add(cas)
+                found.append(cas)
+        return found

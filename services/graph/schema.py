@@ -14,6 +14,13 @@ CONSTRAINTS = [
     "CREATE CONSTRAINT supplier_code IF NOT EXISTS FOR (s:Supplier) REQUIRE s.code IS UNIQUE",
     "CREATE CONSTRAINT customer_id IF NOT EXISTS FOR (c:Customer) REQUIRE c.external_id IS UNIQUE",
     "CREATE CONSTRAINT assembly_model IF NOT EXISTS FOR (a:Assembly) REQUIRE a.model IS UNIQUE",
+    # Supplier Sales & Support Automation
+    "CREATE CONSTRAINT tds_sku_rev IF NOT EXISTS FOR (t:TechnicalDataSheet) REQUIRE (t.product_sku, t.revision_date) IS UNIQUE",
+    "CREATE CONSTRAINT sds_sku_rev IF NOT EXISTS FOR (s:SafetyDataSheet) REQUIRE (s.product_sku, s.revision_date) IS UNIQUE",
+    "CREATE CONSTRAINT industry_name IF NOT EXISTS FOR (i:Industry) REQUIRE i.name IS UNIQUE",
+    "CREATE CONSTRAINT product_line_name IF NOT EXISTS FOR (pl:ProductLine) REQUIRE pl.name IS UNIQUE",
+    "CREATE CONSTRAINT distributor_name IF NOT EXISTS FOR (d:Distributor) REQUIRE d.name IS UNIQUE",
+    "CREATE CONSTRAINT customer_account_id IF NOT EXISTS FOR (ca:CustomerAccount) REQUIRE ca.account_id IS UNIQUE",
 ]
 
 # Property indexes for common queries
@@ -24,12 +31,20 @@ INDEXES = [
     "CREATE INDEX manufacturer_country IF NOT EXISTS FOR (m:Manufacturer) ON (m.country)",
     "CREATE INDEX category_parent IF NOT EXISTS FOR (c:Category) ON (c.parent)",
     "CREATE INDEX supplier_name IF NOT EXISTS FOR (s:Supplier) ON (s.name)",
+    # Supplier Sales indexes
+    "CREATE INDEX industry_name_idx IF NOT EXISTS FOR (i:Industry) ON (i.name)",
+    "CREATE INDEX product_line_name_idx IF NOT EXISTS FOR (pl:ProductLine) ON (pl.name)",
+    "CREATE INDEX tds_product_sku IF NOT EXISTS FOR (t:TechnicalDataSheet) ON (t.product_sku)",
+    "CREATE INDEX sds_product_sku IF NOT EXISTS FOR (s:SafetyDataSheet) ON (s.product_sku)",
+    "CREATE INDEX sds_cas_number IF NOT EXISTS FOR (s:SafetyDataSheet) ON (s.cas_number)",
 ]
 
 # Full-text search index for natural language queries
 FULLTEXT_INDEXES = [
     """CREATE FULLTEXT INDEX part_search IF NOT EXISTS
        FOR (p:Part) ON EACH [p.sku, p.name, p.description]""",
+    """CREATE FULLTEXT INDEX product_cas_search IF NOT EXISTS
+       FOR (s:SafetyDataSheet) ON EACH [s.cas_number, s.product_sku]""",
 ]
 
 # Vector index for embeddings (Voyage AI voyage-3-large = 1024 dims)
@@ -72,6 +87,28 @@ CATEGORY_TAXONOMY = {
         "Gloves", "Eye Protection", "Hearing Protection",
         "Respiratory", "Fall Protection"
     ],
+}
+
+# Supplier Sales: Industry taxonomy for chemical/industrial products
+INDUSTRY_TAXONOMY = {
+    "Adhesives": ["Pressure Sensitive", "Structural", "Hot Melt", "UV Cure"],
+    "Coatings": ["Architectural", "Industrial", "Automotive", "Powder"],
+    "Pharma": ["Excipients", "API", "Drug Delivery", "Nutraceuticals"],
+    "Metal Processing": ["Cutting Fluids", "Corrosion Inhibitors", "Cleaners"],
+    "Water Treatment": ["Flocculants", "Biocides", "Scale Inhibitors", "pH Control"],
+    "Personal Care": ["Skin Care", "Hair Care", "Oral Care", "Sun Care"],
+    "Food & Beverage": ["Emulsifiers", "Stabilizers", "Flavors", "Preservatives"],
+    "Agriculture": ["Adjuvants", "Seed Coating", "Crop Protection"],
+    "Construction": ["Concrete Additives", "Sealants", "Waterproofing"],
+    "Electronics": ["Encapsulants", "Thermal Interface", "Conformal Coatings"],
+    "Energy": ["Drilling Fluids", "Fracturing", "Enhanced Oil Recovery"],
+    "HI&I": ["Cleaning", "Disinfection", "Laundry", "Dishwash"],
+    "Lubricants": ["Engine Oils", "Greases", "Metalworking Fluids"],
+    "Mining": ["Flotation", "Dust Control", "Tailings Management"],
+    "Paints & Inks": ["Pigments", "Binders", "Solvents", "Dispersants"],
+    "Plastics & Rubber": ["Plasticizers", "Stabilizers", "Flame Retardants"],
+    "Pulp & Paper": ["Retention Aids", "Sizing Agents", "Defoamers"],
+    "Textiles": ["Dyes", "Finishing Agents", "Sizing", "Softeners"],
 }
 
 

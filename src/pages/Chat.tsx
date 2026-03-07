@@ -1,37 +1,31 @@
 import { useState, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api, type SourcingResult, type SourcingResponse, type Location } from "@/lib/api";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
-  Search, Send, MapPin, Package, BarChart3, Brain, Database, Building2, CheckCircle2,
-  Moon, Sun, PanelRightOpen, PanelRightClose, Clock, ShoppingBag,
+  Search, Send, BarChart3, Brain, Database, Building2, CheckCircle2,
+  Moon, Sun, PanelRightOpen, PanelRightClose, Clock,
 } from "lucide-react";
-import { toast } from "sonner";
-import ResultCard from "@/components/sourcing/ResultCard";
-import ComparisonTable from "@/components/sourcing/ComparisonTable";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
-  sourcing?: SourcingResponse;
-  orderConfirmation?: { order_id: string; message: string };
 }
 
 const WELCOME: Message = {
   role: "assistant",
   content:
-    "I'm your AI sourcing assistant. Tell me what MRO part you need — I'll find the best price, fastest delivery, and nearest supplier for you.",
+    "I'm your AI support assistant. I can help you look up product specs, find TDS/SDS documents, answer technical questions, and assist with customer inquiries.",
   timestamp: new Date(),
 };
 
 const SUGGESTED_QUERIES = [
-  "Find SKF 6205-2RS bearings",
-  "Compare hydraulic filters",
-  "Need 3M masking tape, 50 rolls",
-  "Best price on Fluke 87V multimeter",
-  "O-rings for high-temperature use",
-  "Parker hydraulic hose 3/8\"",
+  "Look up TDS for POLYOX WSR-301",
+  "What are the specs for epoxy resin?",
+  "Find SDS for CAS 9003-11-6",
+  "What products do we carry for adhesives?",
+  "Technical data on high-temp lubricants",
+  "Search our catalog for silicone sealants",
 ];
 
 function formatTime(date: Date): string {
@@ -76,10 +70,7 @@ function TypewriterMessage({ content, onDone }: { content: string; onDone: () =>
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
-  const [qty, setQty] = useState(1);
-  const [locationId, setLocationId] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(false);
-  const [orderLoadingFor, setOrderLoadingFor] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [thinkingStage, setThinkingStage] = useState(0);
   const [animatingIndex, setAnimatingIndex] = useState<number | null>(null);
@@ -87,11 +78,6 @@ export default function Chat() {
   const [showPanel, setShowPanel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const { data: locations } = useQuery({
-    queryKey: ["locations"],
-    queryFn: () => api.getLocations(),
-  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -129,12 +115,11 @@ export default function Chat() {
     setIsLoading(true);
 
     try {
-      const response = await api.sourcingSearch(trimmed, qty, locationId);
+      const response = await api.sourcingSearch(trimmed);
       const botMessage: Message = {
         role: "assistant",
         content: response.response,
         timestamp: new Date(),
-        sourcing: response,
       };
       setMessages((prev) => [...prev, botMessage]);
       setAnimatingIndex(messages.length + 1);
@@ -171,39 +156,6 @@ export default function Chat() {
     }
   }
 
-  async function handleOrder(result: SourcingResult) {
-    const key = `${result.sku}-${result.seller_name}`;
-    setOrderLoadingFor(key);
-    try {
-      const res = await api.sourcingOrder({
-        seller_name: result.seller_name,
-        sku: result.sku,
-        qty,
-        unit_price: result.unit_price,
-      });
-      const confirmation: Message = {
-        role: "assistant",
-        content: `Order placed successfully with ${result.seller_name} for ${qty}x ${result.name}.`,
-        timestamp: new Date(),
-        orderConfirmation: { order_id: res.order_id, message: res.message },
-      };
-      setMessages((prev) => [...prev, confirmation]);
-      toast.success("Order placed successfully!");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to place order",
-      );
-    } finally {
-      setOrderLoadingFor(null);
-    }
-  }
-
-  function handleRequestQuote(result: SourcingResult) {
-    toast.info(
-      `RFQ sent to ${result.seller_name} for ${qty}x ${result.name}`,
-    );
-  }
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     handleSearch(input);
@@ -233,7 +185,7 @@ export default function Chat() {
           darkMode && "chat-dark",
         )}
       >
-        {/* Chat Header — with qty & location */}
+        {/* Chat Header */}
         <div
           className={cn(
             "flex items-center justify-between gap-3 border-b px-6 py-3 rounded-t-lg",
@@ -248,57 +200,14 @@ export default function Chat() {
             </div>
             <div>
               <h2 className={cn("text-sm font-semibold", darkMode ? "text-white" : "text-gray-900")}>
-                AI Sourcing Assistant
+                AI Support Assistant
               </h2>
               <p className={cn("text-[11px]", darkMode ? "text-slate-400" : "text-gray-500")}>
-                Search parts, compare prices, place orders
+                Product specs, TDS/SDS lookup, technical support
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* Qty input */}
-            <div className="flex items-center gap-1.5">
-              <Package className="h-4 w-4 text-slate-400" />
-              <input
-                type="number"
-                min={1}
-                value={qty}
-                onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                className={cn(
-                  "w-16 rounded-md border px-2 py-1.5 text-xs focus:border-industrial-500 focus:outline-none focus:ring-1 focus:ring-industrial-500/20",
-                  darkMode
-                    ? "bg-[hsl(222,47%,8%)] text-white border-[hsl(217,33%,20%)]"
-                    : "border-slate-300 text-slate-700",
-                )}
-                title="Quantity"
-              />
-              <span className="text-[11px] text-slate-400">qty</span>
-            </div>
-
-            {/* Location selector */}
-            {locations && locations.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <MapPin className="h-4 w-4 text-slate-400" />
-                <select
-                  value={locationId || ""}
-                  onChange={(e) => setLocationId(e.target.value || undefined)}
-                  className={cn(
-                    "rounded-md border px-2 py-1.5 text-xs focus:border-industrial-500 focus:outline-none focus:ring-1 focus:ring-industrial-500/20",
-                    darkMode
-                      ? "bg-[hsl(222,47%,8%)] text-white border-[hsl(217,33%,20%)]"
-                      : "border-slate-300 text-slate-700",
-                  )}
-                >
-                  <option value="">Any location</option>
-                  {locations.map((loc: Location) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.label} — {loc.city}, {loc.state}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
             {/* Dark mode toggle */}
             <button
               onClick={() => setDarkMode(!darkMode)}
@@ -340,10 +249,10 @@ export default function Chat() {
                 <Search className="h-8 w-8 text-white" />
               </div>
               <h2 className={cn("mt-6 text-xl font-semibold", darkMode ? "text-white" : "text-slate-800")}>
-                What part are you looking for?
+                How can I help you today?
               </h2>
               <p className={cn("mt-2 max-w-md text-center text-sm", darkMode ? "text-slate-400" : "text-slate-500")}>
-                Describe the MRO part you need. I'll search across suppliers, compare prices, and find the best option.
+                Ask about product specs, look up TDS/SDS documents, or get answers to technical questions.
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-2">
                 {SUGGESTED_QUERIES.map((q) => (
@@ -411,92 +320,6 @@ export default function Chat() {
                     {formatTime(msg.timestamp)}
                   </span>
                 </div>
-
-                {/* Order Confirmation */}
-                {msg.orderConfirmation && (
-                  <div className="mt-3 animate-scale-in">
-                    <div className={cn(
-                      "rounded-xl border p-4 shadow-sm",
-                      darkMode
-                        ? "border-tech-700 bg-gradient-to-br from-tech-900/50 to-[hsl(222,47%,12%)]"
-                        : "border-tech-200 bg-gradient-to-br from-tech-50 to-white"
-                    )}>
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "flex h-10 w-10 items-center justify-center rounded-full",
-                          darkMode ? "bg-tech-800" : "bg-tech-100"
-                        )}>
-                          <CheckCircle2 className="h-6 w-6 text-tech-500" />
-                        </div>
-                        <div>
-                          <p className={cn("text-sm font-semibold", darkMode ? "text-white" : "text-slate-800")}>
-                            Order Confirmed
-                          </p>
-                          <p className={cn("text-xs", darkMode ? "text-slate-400" : "text-slate-500")}>
-                            #{msg.orderConfirmation.order_id}
-                          </p>
-                        </div>
-                      </div>
-                      <p className={cn("mt-2 text-xs", darkMode ? "text-slate-300" : "text-slate-600")}>
-                        {msg.orderConfirmation.message}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Sourcing Results */}
-                {msg.sourcing &&
-                  msg.sourcing.sourcing_results.length > 0 && (
-                    <div className="mt-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className={cn("text-xs font-medium", darkMode ? "text-slate-400" : "text-slate-500")}>
-                          {msg.sourcing.parts_found} part
-                          {msg.sourcing.parts_found !== 1 ? "s" : ""} found
-                          {" — "}
-                          {msg.sourcing.sourcing_results.length} seller
-                          {msg.sourcing.sourcing_results.length !== 1 ? "s" : ""}
-                        </p>
-                      </div>
-
-                      {/* Task 12d: Auto-expand comparison table */}
-                      {msg.sourcing.sourcing_results.length >= 2 && (
-                        <ComparisonTable
-                          results={msg.sourcing.sourcing_results}
-                          qty={qty}
-                        />
-                      )}
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {msg.sourcing.sourcing_results.map((result, ri) => {
-                          const results = msg.sourcing!.sourcing_results;
-                          const bestPriceIdx = results.reduce((best, r, i) => r.unit_price < results[best].unit_price ? i : best, 0);
-                          const fastestIdx = results.reduce((best, r, i) => r.transit_days < results[best].transit_days ? i : best, 0);
-                          const withDistance = results.filter(r => r.distance_km != null);
-                          const closestIdx = withDistance.length > 0
-                            ? results.indexOf(withDistance.reduce((best, r) => (r.distance_km! < best.distance_km! ? r : best), withDistance[0]))
-                            : -1;
-
-                          return (
-                            <ResultCard
-                              key={`${result.sku}-${result.seller_name}`}
-                              result={result}
-                              qty={qty}
-                              rank={ri + 1}
-                              onOrder={handleOrder}
-                              onRequestQuote={handleRequestQuote}
-                              orderLoading={
-                                orderLoadingFor ===
-                                `${result.sku}-${result.seller_name}`
-                              }
-                              isBestPrice={ri === bestPriceIdx}
-                              isFastestDelivery={ri === fastestIdx}
-                              isClosest={ri === closestIdx}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
               </div>
             );
           })}
@@ -514,10 +337,10 @@ export default function Chat() {
               >
                 <div className="space-y-2.5">
                   {[
-                    { icon: Brain, label: "Analyzing your query..." },
-                    { icon: Database, label: "Searching knowledge graph..." },
-                    { icon: Building2, label: "Matching sellers..." },
-                    { icon: BarChart3, label: "Ranking results..." },
+                    { icon: Brain, label: "Analyzing your question..." },
+                    { icon: Database, label: "Searching knowledge base..." },
+                    { icon: Building2, label: "Looking up product data..." },
+                    { icon: BarChart3, label: "Preparing response..." },
                   ].map((stage, i) => (
                     <div
                       key={stage.label}
@@ -559,7 +382,7 @@ export default function Chat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search for MRO parts — e.g. 'SKF 6205 bearing' or '3M masking tape'"
+              placeholder="Ask about products, specs, or TDS/SDS documents..."
               disabled={isLoading}
               className={cn(
                 "min-w-0 flex-1 rounded-full border px-4 py-2.5 text-sm shadow-sm transition-colors focus:border-industrial-500 focus:outline-none focus:ring-2 focus:ring-industrial-500/20 disabled:cursor-not-allowed",
@@ -577,7 +400,7 @@ export default function Chat() {
             </button>
           </form>
           <p className={cn("mt-2 text-center text-[11px]", darkMode ? "text-slate-500" : "text-gray-400")}>
-            AI-powered sourcing — Results ranked by price, delivery, and proximity
+            AI-powered support — Product specs, TDS/SDS, and technical answers
           </p>
         </div>
       </div>
@@ -596,27 +419,6 @@ export default function Chat() {
             <h3 className={cn("text-sm font-semibold", darkMode ? "text-white" : "text-slate-800")}>History</h3>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {/* Recent Orders */}
-            <div className={cn("border-b px-4 py-3", darkMode ? "border-[hsl(217,33%,20%)]" : "border-slate-200")}>
-              <div className="flex items-center gap-2 mb-3">
-                <ShoppingBag className="h-4 w-4 text-industrial-500" />
-                <span className={cn("text-xs font-semibold uppercase tracking-wider", darkMode ? "text-slate-400" : "text-slate-500")}>Recent Orders</span>
-              </div>
-              {messages
-                .filter(m => m.orderConfirmation)
-                .slice(-5)
-                .map((m, i) => (
-                  <div key={i} className={cn("mb-2 rounded-lg p-2.5", darkMode ? "bg-white/5" : "bg-slate-50")}>
-                    <p className={cn("text-xs font-medium", darkMode ? "text-slate-200" : "text-slate-700")}>#{m.orderConfirmation!.order_id}</p>
-                    <p className={cn("text-[11px] truncate", darkMode ? "text-slate-500" : "text-slate-400")}>{m.content.slice(0, 60)}</p>
-                  </div>
-                ))
-              }
-              {messages.filter(m => m.orderConfirmation).length === 0 && (
-                <p className={cn("text-xs italic", darkMode ? "text-slate-500" : "text-slate-400")}>No orders yet</p>
-              )}
-            </div>
-
             {/* Past Queries */}
             <div className="px-4 py-3">
               <div className="flex items-center gap-2 mb-3">
