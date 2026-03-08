@@ -250,3 +250,42 @@ async def test_extract_sds_fields_with_confidence():
         fields = await svc.extract_sds_fields_with_confidence("sample sds text")
         assert fields["cas_numbers"]["confidence"] == 0.99
         assert fields["ghs_classification"]["value"] == "Not classified"
+
+
+@pytest.mark.asyncio
+async def test_call_llm_strips_markdown_fences():
+    """_call_llm should handle LLM responses wrapped in ```json fences."""
+    from services.document_service import DocumentService
+    svc = DocumentService(db_manager=MagicMock(), ai_service=MagicMock())
+    svc._ai.chat = AsyncMock(return_value='```json\n{"density": "1.05 g/mL"}\n```')
+    result = await svc._call_llm("Extract fields")
+    assert result == {"density": "1.05 g/mL"}
+
+
+@pytest.mark.asyncio
+async def test_call_llm_strips_triple_backtick_only():
+    """_call_llm should handle responses with ``` but no json tag."""
+    from services.document_service import DocumentService
+    svc = DocumentService(db_manager=MagicMock(), ai_service=MagicMock())
+    svc._ai.chat = AsyncMock(return_value='```\n{"pH": "7.0"}\n```')
+    result = await svc._call_llm("Extract fields")
+    assert result == {"pH": "7.0"}
+
+
+@pytest.mark.asyncio
+async def test_extract_tds_fields_truncates_long_text():
+    """Old extract_tds_fields should truncate text to 8000 chars."""
+    from services.document_service import DocumentService
+    svc = DocumentService(db_manager=MagicMock(), ai_service=MagicMock())
+    captured_prompt = None
+    async def capture_chat(prompt, **kwargs):
+        nonlocal captured_prompt
+        captured_prompt = prompt
+        return '{"density": "1.0"}'
+    svc._ai.chat = capture_chat
+
+    long_text = "A" * 20000
+    await svc.extract_tds_fields(long_text)
+
+    # The text portion of the prompt should be truncated
+    assert len(captured_prompt) < 10000  # 8000 chars + prompt template

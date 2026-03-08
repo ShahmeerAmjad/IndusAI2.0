@@ -93,11 +93,11 @@ class DocumentService:
 
     async def extract_tds_fields(self, text: str) -> dict:
         """Use LLM to extract structured TDS fields from raw text."""
-        return await self._call_llm(TDS_EXTRACTION_PROMPT.format(text=text))
+        return await self._call_llm(TDS_EXTRACTION_PROMPT.format(text=text[:8000]))
 
     async def extract_sds_fields(self, text: str) -> dict:
         """Use LLM to extract structured SDS fields from raw text."""
-        return await self._call_llm(SDS_EXTRACTION_PROMPT.format(text=text))
+        return await self._call_llm(SDS_EXTRACTION_PROMPT.format(text=text[:8000]))
 
     async def get_documents_for_product(self, product_id: str) -> list[dict]:
         """Return current TDS/SDS documents for a product."""
@@ -155,4 +155,10 @@ class DocumentService:
         if self._ai is None:
             raise RuntimeError("AI service not configured")
         raw = await self._ai.chat(prompt)
-        return json.loads(raw)
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            first_newline = cleaned.index("\n")
+            cleaned = cleaned[first_newline + 1:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3].strip()
+        return json.loads(cleaned)
