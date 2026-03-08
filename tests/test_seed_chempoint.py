@@ -96,7 +96,7 @@ def _make_pipeline(scraper_return=None, doc_fields=None, db_row=None):
 async def test_seed_from_url_scraper_returns_empty():
     pipeline, scraper, doc, graph, db = _make_pipeline(scraper_return=[])
     result = await pipeline.seed_from_url("https://chempoint.com/empty")
-    assert result == {"products_created": 0, "tds_stored": 0, "sds_stored": 0, "industries_linked": 0, "errors": 0}
+    assert result == {"products_created": 0, "products_updated": 0, "tds_stored": 0, "sds_stored": 0, "industries_linked": 0, "errors": 0}
     graph.create_tds.assert_not_called()
     graph.create_sds.assert_not_called()
 
@@ -325,3 +325,100 @@ async def test_pipeline_stores_confidence_in_graph():
     call_args = mock_graph.create_tds.call_args
     fields = call_args[0][1]
     assert "appearance" in fields
+
+
+@pytest.mark.asyncio
+async def test_empty_product_name_skipped():
+    """Products with empty names should be skipped, not create bad SKUs."""
+    pipeline, mock_scraper, mock_doc, mock_graph, mock_db = _make_pipeline()
+    mock_scraper.scrape_product_page = AsyncMock(return_value=[
+        {"name": "", "manufacturer": "ACME"},
+        {"name": "   ", "manufacturer": "ACME"},
+        {"name": "Valid Product", "manufacturer": "3M",
+         "description": "Good product"},
+    ])
+    mock_db.pool.acquire.return_value.__aenter__.return_value.fetchrow = AsyncMock(
+        return_value={"id": "uuid-1", "sku": "VALID-PRODUCT", "xmax": 0})
+    mock_db.pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    stats = await pipeline.seed_from_url("https://example.com", on_progress=lambda e: None)
+
+    assert stats["products_created"] == 1
+    assert stats["errors"] == 2
+
+
+@pytest.mark.asyncio
+async def test_max_products_enforced_across_industries():
+    """seed_from_industries stops after max_products globally."""
+    pipeline, mock_scraper, mock_doc, mock_graph, mock_db = _make_pipeline()
+
+    call_count = 0
+    async def mock_scrape_industry(url):
+        nonlocal call_count
+        call_count += 1
+        return [{"name": f"Product-{call_count}-{i}", "url": f"https://ex.com/p{i}"}
+                for i in range(5)]
+
+    mock_scraper.scrape_industry_page = AsyncMock(side_effect=mock_scrape_industry)
+    mock_scraper.scrape_product_page = AsyncMock(return_value=[
+        {"name": "P", "manufacturer": "M", "description": "D"}
+    ])
+    mock_db.pool.acquire.return_value.__aenter__.return_value.fetchrow = AsyncMock(
+        return_value={"id": "uuid-1", "sku": "P", "xmax": 0})
+    mock_db.pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    stats = await pipeline.seed_from_industries(
+        ["https://ex.com/ind1", "https://ex.com/ind2", "https://ex.com/ind3"],
+        on_progress=lambda e: None,
+        max_products=3,
+    )
+
+    assert stats["products_created"] <= 3
+
+
+@pytest.mark.asyncio
+async def test_tracks_created_vs_updated():
+    """Pipeline should distinguish new products from updated ones."""
+    pipeline, mock_scraper, mock_doc, mock_graph, mock_db = _make_pipeline()
+    mock_scraper.scrape_product_page = AsyncMock(return_value=[
+        {"name": "New Product", "manufacturer": "3M"},
+        {"name": "Existing Product", "manufacturer": "3M"},
+    ])
+
+    # First call returns xmax=0 (INSERT), second returns xmax!=0 (UPDATE)
+    call_count = 0
+    async def mock_fetchrow(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        row = MagicMock()
+        row.__getitem__ = lambda self, k: {"id": f"uuid-{call_count}", "sku": f"P-{call_count}",
+                                            "xmax": 0 if call_count == 1 else 1}[k]
+        row.get = lambda k, d=None: {"id": f"uuid-{call_count}", "sku": f"P-{call_count}",
+                                      "xmax": 0 if call_count == 1 else 1}.get(k, d)
+        return row
+
+    mock_db.pool.acquire.return_value.__aenter__.return_value.fetchrow = AsyncMock(side_effect=mock_fetchrow)
+    mock_db.pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    stats = await pipeline.seed_from_url("https://example.com", on_progress=lambda e: None)
+
+    assert stats["products_created"] == 1
+    assert stats["products_updated"] == 1
+
+
+@pytest.mark.asyncio
+async def test_seed_from_industries_uses_compaction():
+    """Batch ingestion should work with llm_router wired in."""
+    pipeline, mock_scraper, mock_doc, mock_graph, mock_db = _make_pipeline()
+    pipeline._llm = MagicMock()
+    pipeline._llm.chat_with_compaction = AsyncMock(return_value='[{"name": "P1"}]')
+
+    mock_scraper.scrape_industry_page = AsyncMock(return_value=[])
+
+    stats = await pipeline.seed_from_industries(
+        ["https://ex.com/ind1"],
+        on_progress=lambda e: None,
+        max_products=50,
+    )
+
+    assert stats["errors"] == 0

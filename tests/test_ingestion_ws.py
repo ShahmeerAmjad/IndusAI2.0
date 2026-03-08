@@ -8,7 +8,7 @@ from httpx import AsyncClient, ASGITransport
 
 from routes.ingestion_ws import (
     router, set_ingestion_pipeline,
-    _jobs, _job_events, _job_subscribers, _broadcast,
+    _jobs, _job_events, _job_subscribers, _broadcast, _cancelled,
 )
 
 
@@ -25,6 +25,7 @@ def cleanup():
     _jobs.clear()
     _job_events.clear()
     _job_subscribers.clear()
+    _cancelled.clear()
     set_ingestion_pipeline(None)
 
 
@@ -153,3 +154,50 @@ class TestGetJobStatus:
             resp = await ac.get("/api/v1/ingestion/jobs/j2")
         data = resp.json()
         assert len(data["events"]) == 20
+
+
+class TestCancelJob:
+    """Test the cancel endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_job(self):
+        set_ingestion_pipeline(MagicMock())
+        _jobs["test-job-1"] = {"job_id": "test-job-1", "status": "running", "result": None}
+        _job_events["test-job-1"] = []
+
+        app = _make_test_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post("/api/v1/ingestion/jobs/test-job-1/cancel")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_cancel_job_not_found(self):
+        set_ingestion_pipeline(MagicMock())
+        app = _make_test_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post("/api/v1/ingestion/jobs/nonexistent/cancel")
+        assert resp.status_code == 404
+
+
+class TestBatchErrorBroadcast:
+    """Test error broadcasting on batch failure."""
+
+    @pytest.mark.asyncio
+    async def test_batch_job_broadcasts_error_on_failure(self):
+        """Batch job should broadcast an error event when pipeline raises."""
+        import routes.ingestion_ws as mod
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.seed_from_industries = AsyncMock(side_effect=Exception("Firecrawl down"))
+        mod._pipeline = mock_pipeline
+
+        job_id = "fail-job"
+        _jobs[job_id] = {"job_id": job_id, "status": "running", "result": None}
+        _job_events[job_id] = []
+
+        await mod._run_batch(job_id, ["https://ex.com/ind1"], 50)
+
+        assert _jobs[job_id]["status"] == "failed"
+        error_events = [e for e in _job_events[job_id] if e.get("stage") == "error"]
+        assert len(error_events) >= 1

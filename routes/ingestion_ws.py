@@ -17,11 +17,16 @@ _pipeline = None
 _jobs: dict[str, dict] = {}
 _job_events: dict[str, list[dict]] = {}
 _job_subscribers: dict[str, list[WebSocket]] = {}
+_cancelled: set[str] = set()
 
 
 def set_ingestion_pipeline(pipeline):
     global _pipeline
     _pipeline = pipeline
+
+
+def is_cancelled(job_id: str) -> bool:
+    return job_id in _cancelled
 
 
 class StartIngestionRequest(BaseModel):
@@ -31,6 +36,55 @@ class StartIngestionRequest(BaseModel):
 class StartBatchRequest(BaseModel):
     industry_urls: list[str]
     max_products: int = 50
+
+
+async def _broadcast(job_id: str, event: dict):
+    """Store event and broadcast to all WebSocket subscribers."""
+    if job_id in _job_events:
+        _job_events[job_id].append(event)
+
+    for ws in _job_subscribers.get(job_id, []):
+        try:
+            await ws.send_text(json.dumps(event))
+        except Exception:
+            pass
+
+
+async def _run_single(job_id: str, url: str):
+    """Run single-URL ingestion with proper error broadcasting."""
+    try:
+        cancel_fn = lambda: is_cancelled(job_id)
+        broadcast_fn = lambda event: asyncio.ensure_future(_broadcast(job_id, event))
+        result = await _pipeline.seed_from_url(
+            url, on_progress=broadcast_fn, cancel_check=cancel_fn,
+        )
+        _jobs[job_id]["status"] = "completed"
+        _jobs[job_id]["result"] = result
+        await _broadcast(job_id, {"stage": "done", "result": result})
+    except Exception as exc:
+        logger.error("Ingestion job %s failed: %s", job_id, exc)
+        _jobs[job_id]["status"] = "failed"
+        _jobs[job_id]["result"] = {"error": str(exc)}
+        await _broadcast(job_id, {"stage": "error", "detail": str(exc)})
+
+
+async def _run_batch(job_id: str, industry_urls: list[str], max_products: int):
+    """Run batch ingestion with proper error broadcasting."""
+    try:
+        cancel_fn = lambda: is_cancelled(job_id)
+        broadcast_fn = lambda event: asyncio.ensure_future(_broadcast(job_id, event))
+        stats = await _pipeline.seed_from_industries(
+            industry_urls, on_progress=broadcast_fn,
+            max_products=max_products, cancel_check=cancel_fn,
+        )
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["result"] = stats
+        await _broadcast(job_id, {"stage": "done", "detail": str(stats)})
+    except Exception as exc:
+        logger.error("Batch ingestion %s failed: %s", job_id, exc)
+        _jobs[job_id]["status"] = "failed"
+        _jobs[job_id]["result"] = {"error": str(exc)}
+        await _broadcast(job_id, {"stage": "error", "detail": str(exc)})
 
 
 @router.post("/start", status_code=202)
@@ -44,21 +98,7 @@ async def start_ingestion(req: StartIngestionRequest):
     _job_events[job_id] = []
     _job_subscribers[job_id] = []
 
-    async def _run():
-        try:
-            result = await _pipeline.seed_from_url(
-                req.url, on_progress=lambda e: _broadcast(job_id, e),
-            )
-            _jobs[job_id]["status"] = "completed"
-            _jobs[job_id]["result"] = result
-            _broadcast(job_id, {"stage": "done", "result": result})
-        except Exception as exc:
-            logger.error("Ingestion job %s failed: %s", job_id, exc)
-            _jobs[job_id]["status"] = "failed"
-            _jobs[job_id]["error"] = str(exc)
-            _broadcast(job_id, {"stage": "error", "detail": str(exc)})
-
-    asyncio.create_task(_run())
+    asyncio.create_task(_run_single(job_id, req.url))
     return {"job_id": job_id, "status": "running"}
 
 
@@ -73,21 +113,18 @@ async def start_batch_ingestion(req: StartBatchRequest):
     _job_events[job_id] = []
     _job_subscribers[job_id] = []
 
-    async def _run():
-        try:
-            result = await _pipeline.seed_from_industries(
-                req.industry_urls,
-                on_progress=lambda e: _broadcast(job_id, e),
-            )
-            _jobs[job_id]["status"] = "completed"
-            _jobs[job_id]["result"] = result
-            _broadcast(job_id, {"stage": "done", "result": result})
-        except Exception as exc:
-            _jobs[job_id]["status"] = "failed"
-            _jobs[job_id]["error"] = str(exc)
-
-    asyncio.create_task(_run())
+    asyncio.create_task(_run_batch(job_id, req.industry_urls, req.max_products))
     return {"job_id": job_id, "status": "running"}
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    if job_id not in _jobs:
+        raise HTTPException(404, "Job not found")
+    _cancelled.add(job_id)
+    _jobs[job_id]["status"] = "cancelled"
+    await _broadcast(job_id, {"stage": "cancelled", "detail": "Job cancelled by user"})
+    return {"job_id": job_id, "status": "cancelled"}
 
 
 @router.get("/jobs/{job_id}")
@@ -118,15 +155,3 @@ async def ws_progress(websocket: WebSocket, job_id: str):
     except WebSocketDisconnect:
         if websocket in _job_subscribers.get(job_id, []):
             _job_subscribers[job_id].remove(websocket)
-
-
-def _broadcast(job_id: str, event: dict):
-    """Store event and broadcast to all WebSocket subscribers."""
-    if job_id in _job_events:
-        _job_events[job_id].append(event)
-
-    for ws in _job_subscribers.get(job_id, []):
-        try:
-            asyncio.create_task(ws.send_text(json.dumps(event)))
-        except Exception:
-            pass
