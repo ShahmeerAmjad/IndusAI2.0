@@ -22,43 +22,71 @@ class ChempointSeedPipeline:
         self._graph = graph_service
         self._db = db_manager
 
-    async def seed_from_url(self, url: str) -> dict:
+    async def seed_from_url(self, url: str, on_progress=None) -> dict:
         """Scrape a Chempoint product page and populate the knowledge graph."""
+        _emit = on_progress or (lambda e: None)
+        _emit({"stage": "scraping", "detail": f"Fetching {url}"})
+
         products = await self._scraper.scrape_product_page(url)
+        total = len(products)
 
         stats = {
             "products_created": 0,
             "tds_stored": 0,
             "sds_stored": 0,
             "industries_linked": 0,
+            "errors": 0,
         }
 
-        for product_data in products:
+        for i, product_data in enumerate(products):
+            name = product_data.get("name", "unknown")
             try:
-                await self._process_product(product_data, stats)
+                _emit({"stage": "processing", "product": name,
+                       "current": i + 1, "total": total})
+                await self._process_product(product_data, stats, _emit)
             except Exception as e:
-                logger.error("Failed to process product %s: %s",
-                             product_data.get("name"), e)
+                logger.error("Failed to process product %s: %s", name, e)
+                stats["errors"] += 1
+                _emit({"stage": "error", "product": name, "detail": str(e)})
 
+        _emit({"stage": "done", "detail": f"Completed: {stats}"})
         logger.info("Seed pipeline complete: %s", stats)
         return stats
 
-    async def seed_from_industry(self, url: str) -> dict:
+    async def seed_from_industry(self, url: str, on_progress=None) -> dict:
         """Scrape an industry page then process each product."""
         product_summaries = await self._scraper.scrape_industry_page(url)
-        stats = {"products_created": 0, "tds_stored": 0, "sds_stored": 0, "industries_linked": 0}
+        stats = {"products_created": 0, "tds_stored": 0, "sds_stored": 0,
+                 "industries_linked": 0, "errors": 0}
 
         for summary in product_summaries:
             product_url = summary.get("url")
             if product_url:
-                sub_stats = await self.seed_from_url(product_url)
+                sub_stats = await self.seed_from_url(product_url, on_progress=on_progress)
                 for k in stats:
                     stats[k] += sub_stats.get(k, 0)
 
         return stats
 
-    async def _process_product(self, product_data: dict, stats: dict) -> None:
+    async def seed_from_industries(self, industry_urls: list[str],
+                                    on_progress=None) -> dict:
+        """Batch scrape multiple industry pages."""
+        _emit = on_progress or (lambda e: None)
+        combined = {"products_created": 0, "tds_stored": 0,
+                    "sds_stored": 0, "industries_linked": 0, "errors": 0}
+
+        for idx, url in enumerate(industry_urls):
+            _emit({"stage": "discovering", "detail": f"Industry {idx+1}/{len(industry_urls)}: {url}"})
+            sub = await self.seed_from_industry(url, on_progress=on_progress)
+            for k in combined:
+                combined[k] += sub.get(k, 0)
+
+        return combined
+
+    async def _process_product(self, product_data: dict, stats: dict,
+                                _emit=None) -> None:
         """Process a single product: create in PG, download docs, build graph."""
+        _emit = _emit or (lambda e: None)
         name = product_data.get("name", "")
         sku = _make_sku(name)
         manufacturer = product_data.get("manufacturer", "")
@@ -79,12 +107,12 @@ class ChempointSeedPipeline:
         # Download and process TDS
         tds_url = product_data.get("tds_url")
         if tds_url:
-            await self._process_document(product_id, sku, tds_url, "TDS", stats)
+            await self._process_document(product_id, sku, tds_url, "TDS", stats, _emit)
 
         # Download and process SDS
         sds_url = product_data.get("sds_url")
         if sds_url:
-            await self._process_document(product_id, sku, sds_url, "SDS", stats)
+            await self._process_document(product_id, sku, sds_url, "SDS", stats, _emit)
 
         # Link to industries
         for industry in product_data.get("industries", []):
@@ -97,9 +125,13 @@ class ChempointSeedPipeline:
             await self._graph.link_product_to_product_line(sku, product_line, manufacturer)
 
     async def _process_document(self, product_id: str, sku: str,
-                                doc_url: str, doc_type: str, stats: dict) -> None:
+                                doc_url: str, doc_type: str, stats: dict,
+                                _emit=None) -> None:
         """Download a TDS/SDS PDF, extract text and fields, create graph node."""
+        _emit = _emit or (lambda e: None)
         try:
+            _emit({"stage": "downloading_pdf", "product": sku,
+                   "detail": f"{doc_type} from {doc_url}"})
             file_bytes = await self._scraper.download_document(doc_url)
             file_name = doc_url.split("/")[-1] or f"{doc_type.lower()}.pdf"
 
@@ -109,18 +141,34 @@ class ChempointSeedPipeline:
                 source_url=doc_url,
             )
 
+            _emit({"stage": "extracting", "product": sku,
+                   "detail": f"OCR + Claude extraction for {doc_type}"})
             text = await self._doc.extract_text_from_pdf(file_bytes)
 
             if doc_type == "TDS":
-                fields = await self._doc.extract_tds_fields(text)
-                fields["pdf_url"] = doc_url
-                await self._graph.create_tds(sku, fields)
+                raw_fields = await self._doc.extract_tds_fields_with_confidence(text)
+            else:
+                raw_fields = await self._doc.extract_sds_fields_with_confidence(text)
+
+            # Flatten for graph (store values only)
+            flat_fields = {}
+            for k, v in raw_fields.items():
+                if isinstance(v, dict) and "value" in v:
+                    flat_fields[k] = v["value"]
+                else:
+                    flat_fields[k] = v
+            flat_fields["pdf_url"] = doc_url
+
+            _emit({"stage": "building_graph", "product": sku,
+                   "detail": f"{doc_type}: {len(flat_fields)} fields extracted"})
+
+            if doc_type == "TDS":
+                await self._graph.create_tds(sku, flat_fields)
                 stats["tds_stored"] += 1
             else:
-                fields = await self._doc.extract_sds_fields(text)
-                fields["pdf_url"] = doc_url
-                await self._graph.create_sds(sku, fields)
+                await self._graph.create_sds(sku, flat_fields)
                 stats["sds_stored"] += 1
 
         except Exception as e:
             logger.warning("Failed to process %s from %s: %s", doc_type, doc_url, e)
+            stats["errors"] = stats.get("errors", 0) + 1

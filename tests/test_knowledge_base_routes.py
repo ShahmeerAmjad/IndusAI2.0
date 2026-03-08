@@ -34,6 +34,9 @@ def setup_services():
     mock_svc.ingest_batch = AsyncMock(return_value={
         "total": 3, "ingested": 3, "errors": [],
     })
+    mock_svc.get_graph_visualization = AsyncMock(return_value={
+        "nodes": [], "edges": [],
+    })
 
     mock_scraper = MagicMock()
     mock_scraper.crawl_full_catalog = AsyncMock(return_value=[
@@ -204,3 +207,27 @@ class TestUploadDocument:
         with pytest.raises(Exception) as exc_info:
             await upload_document(product_id="CP-001", doc_type="TDS", file=mock_file)
         assert exc_info.value.status_code == 503
+
+
+# ── Graph Visualization ──
+
+
+class TestGraphVisualization:
+    @pytest.mark.asyncio
+    async def test_graph_visualization_endpoint(self, setup_services):
+        from routes.knowledge_base import graph_visualization
+        result = await graph_visualization(industry=None, manufacturer=None, limit=100)
+        assert "nodes" in result
+        assert "edges" in result
+        setup_services["svc"].get_graph_visualization.assert_called_once_with(
+            industry=None, manufacturer=None, limit=100,
+        )
+
+    @pytest.mark.asyncio
+    async def test_graph_visualization_with_industry_filter(self, setup_services):
+        from routes.knowledge_base import graph_visualization
+        result = await graph_visualization(industry="Adhesives", manufacturer=None, limit=100)
+        assert "nodes" in result
+        setup_services["svc"].get_graph_visualization.assert_called_once_with(
+            industry="Adhesives", manufacturer=None, limit=100,
+        )

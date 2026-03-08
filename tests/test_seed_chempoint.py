@@ -21,8 +21,12 @@ async def test_seed_pipeline_creates_product_and_tds():
     mock_doc_service = MagicMock()
     mock_doc_service.store_document = AsyncMock(return_value={"id": "doc-1"})
     mock_doc_service.extract_text_from_pdf = AsyncMock(return_value="Appearance: White powder")
-    mock_doc_service.extract_tds_fields = AsyncMock(return_value={"appearance": "White powder"})
-    mock_doc_service.extract_sds_fields = AsyncMock(return_value={"cas_numbers": ["25322-68-3"]})
+    mock_doc_service.extract_tds_fields_with_confidence = AsyncMock(return_value={
+        "appearance": {"value": "White powder", "confidence": 0.95},
+    })
+    mock_doc_service.extract_sds_fields_with_confidence = AsyncMock(return_value={
+        "cas_numbers": {"value": ["25322-68-3"], "confidence": 0.99},
+    })
 
     mock_graph = MagicMock()
     mock_graph.create_tds = AsyncMock()
@@ -61,8 +65,10 @@ def _make_pipeline(scraper_return=None, doc_fields=None, db_row=None):
     mock_doc = MagicMock()
     mock_doc.store_document = AsyncMock(return_value={"id": "doc-1"})
     mock_doc.extract_text_from_pdf = AsyncMock(return_value="some text")
-    mock_doc.extract_tds_fields = AsyncMock(return_value=doc_fields or {"appearance": "White"})
-    mock_doc.extract_sds_fields = AsyncMock(return_value=doc_fields or {"cas_numbers": ["123"]})
+    mock_doc.extract_tds_fields_with_confidence = AsyncMock(
+        return_value=doc_fields or {"appearance": {"value": "White", "confidence": 0.9}})
+    mock_doc.extract_sds_fields_with_confidence = AsyncMock(
+        return_value=doc_fields or {"cas_numbers": {"value": ["123"], "confidence": 0.9}})
 
     mock_graph = MagicMock()
     mock_graph.create_tds = AsyncMock()
@@ -90,7 +96,7 @@ def _make_pipeline(scraper_return=None, doc_fields=None, db_row=None):
 async def test_seed_from_url_scraper_returns_empty():
     pipeline, scraper, doc, graph, db = _make_pipeline(scraper_return=[])
     result = await pipeline.seed_from_url("https://chempoint.com/empty")
-    assert result == {"products_created": 0, "tds_stored": 0, "sds_stored": 0, "industries_linked": 0}
+    assert result == {"products_created": 0, "tds_stored": 0, "sds_stored": 0, "industries_linked": 0, "errors": 0}
     graph.create_tds.assert_not_called()
     graph.create_sds.assert_not_called()
 
@@ -227,3 +233,95 @@ async def test_seed_from_url_product_line_linking():
     graph.link_product_to_product_line.assert_called_once_with(
         "POLYOX-WSR-301", "POLYOX Resins", "Dow"
     )
+
+
+@pytest.mark.asyncio
+async def test_pipeline_with_progress_callback():
+    from services.ingestion.seed_chempoint import ChempointSeedPipeline
+
+    progress_events = []
+
+    def on_progress(event):
+        progress_events.append(event)
+
+    mock_scraper = MagicMock()
+    mock_scraper.scrape_product_page = AsyncMock(return_value=[{
+        "name": "POLYOX WSR-301", "manufacturer": "Dow",
+        "cas_number": "25322-68-3", "product_line": "POLYOX",
+        "industries": ["Adhesives"], "tds_url": "https://example.com/tds.pdf",
+        "sds_url": "https://example.com/sds.pdf",
+    }])
+    mock_scraper.download_document = AsyncMock(return_value=b"fake-pdf")
+
+    mock_doc = MagicMock()
+    mock_doc.store_document = AsyncMock(return_value={"id": "doc-1"})
+    mock_doc.extract_text_from_pdf = AsyncMock(return_value="Appearance: White powder")
+    mock_doc.extract_tds_fields_with_confidence = AsyncMock(return_value={
+        "appearance": {"value": "White powder", "confidence": 0.95},
+    })
+    mock_doc.extract_sds_fields_with_confidence = AsyncMock(return_value={
+        "cas_numbers": {"value": ["25322-68-3"], "confidence": 0.99},
+    })
+
+    mock_graph = MagicMock()
+    mock_graph.create_tds = AsyncMock()
+    mock_graph.create_sds = AsyncMock()
+    mock_graph.link_product_to_industry = AsyncMock()
+    mock_graph.link_product_to_product_line = AsyncMock()
+
+    mock_db = MagicMock()
+    mock_db.pool.acquire.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
+        fetchrow=AsyncMock(return_value={"id": "prod-1", "sku": "POLYOX-WSR-301"})
+    ))
+    mock_db.pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    pipeline = ChempointSeedPipeline(
+        scraper=mock_scraper, doc_service=mock_doc,
+        graph_service=mock_graph, db_manager=mock_db,
+    )
+    result = await pipeline.seed_from_url(
+        "https://chempoint.com/products/polyox", on_progress=on_progress,
+    )
+    assert result["products_created"] >= 1
+    assert len(progress_events) >= 3
+    assert progress_events[0]["stage"] in ("scraping", "discovering")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_stores_confidence_in_graph():
+    from services.ingestion.seed_chempoint import ChempointSeedPipeline
+
+    mock_scraper = MagicMock()
+    mock_scraper.scrape_product_page = AsyncMock(return_value=[{
+        "name": "TEST-PROD", "manufacturer": "TestMfr",
+        "tds_url": "https://example.com/tds.pdf",
+    }])
+    mock_scraper.download_document = AsyncMock(return_value=b"fake")
+
+    mock_doc = MagicMock()
+    mock_doc.store_document = AsyncMock(return_value={"id": "d1"})
+    mock_doc.extract_text_from_pdf = AsyncMock(return_value="text")
+    mock_doc.extract_tds_fields_with_confidence = AsyncMock(return_value={
+        "appearance": {"value": "Clear liquid", "confidence": 0.92},
+    })
+
+    mock_graph = MagicMock()
+    mock_graph.create_tds = AsyncMock()
+    mock_graph.link_product_to_industry = AsyncMock()
+    mock_graph.link_product_to_product_line = AsyncMock()
+
+    mock_db = MagicMock()
+    mock_db.pool.acquire.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
+        fetchrow=AsyncMock(return_value={"id": "p1", "sku": "TEST-PROD"})
+    ))
+    mock_db.pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    pipeline = ChempointSeedPipeline(
+        scraper=mock_scraper, doc_service=mock_doc,
+        graph_service=mock_graph, db_manager=mock_db,
+    )
+    await pipeline.seed_from_url("https://example.com/test")
+
+    call_args = mock_graph.create_tds.call_args
+    fields = call_args[0][1]
+    assert "appearance" in fields

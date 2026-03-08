@@ -125,6 +125,75 @@ class KnowledgeBaseService:
     # Querying
     # ------------------------------------------------------------------
 
+    async def get_graph_visualization(self, industry=None, manufacturer=None, limit=100):
+        """Query Neo4j for nodes and edges, formatted for Neovis.js."""
+        conditions = []
+        params = {"limit": limit}
+
+        if industry:
+            conditions.append("(p)-[:SERVES_INDUSTRY]->(:Industry {name: $industry})")
+            params["industry"] = industry
+        if manufacturer:
+            conditions.append("p.manufacturer = $manufacturer")
+            params["manufacturer"] = manufacturer
+
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        cypher = f"""
+        MATCH (p:Part)
+        {where}
+        OPTIONAL MATCH (p)-[:HAS_TDS]->(t:TechnicalDataSheet)
+        OPTIONAL MATCH (p)-[:HAS_SDS]->(s:SafetyDataSheet)
+        OPTIONAL MATCH (p)-[:SERVES_INDUSTRY]->(i:Industry)
+        OPTIONAL MATCH (p)-[:BELONGS_TO]->(pl:ProductLine)
+        OPTIONAL MATCH (pl)-[:MADE_BY]->(m:Manufacturer)
+        RETURN p, t, s, i, pl, m
+        LIMIT $limit
+        """
+
+        results = await self._graph.execute_read(cypher, params)
+
+        nodes = {}
+        edges = []
+
+        for record in results:
+            for key, label, color in [
+                ("p", "Product", "#1e3a8a"),
+                ("t", "TDS", "#7c3aed"),
+                ("s", "SDS", "#dc2626"),
+                ("i", "Industry", "#f59e0b"),
+                ("pl", "ProductLine", "#0d9488"),
+                ("m", "Manufacturer", "#059669"),
+            ]:
+                node = record.get(key)
+                if node:
+                    node_id = f"{label}:{node.get('sku') or node.get('name') or node.get('product_sku', '')}"
+                    if node_id not in nodes:
+                        nodes[node_id] = {
+                            "id": node_id, "label": label,
+                            "name": node.get("name") or node.get("sku") or node.get("product_sku", ""),
+                            "color": color, "properties": dict(node),
+                        }
+
+        for record in results:
+            p_id = f"Product:{record.get('p', {}).get('sku', '')}" if record.get("p") else None
+            if not p_id:
+                continue
+            for key, label, rel in [
+                ("t", "TDS", "HAS_TDS"), ("s", "SDS", "HAS_SDS"),
+                ("i", "Industry", "SERVES_INDUSTRY"), ("pl", "ProductLine", "BELONGS_TO"),
+            ]:
+                target = record.get(key)
+                if target:
+                    t_id = f"{label}:{target.get('name') or target.get('product_sku', '')}"
+                    edges.append({"source": p_id, "target": t_id, "relationship": rel})
+            if record.get("pl") and record.get("m"):
+                pl_id = f"ProductLine:{record['pl'].get('name', '')}"
+                m_id = f"Manufacturer:{record['m'].get('name', '')}"
+                edges.append({"source": pl_id, "target": m_id, "relationship": "MADE_BY"})
+
+        return {"nodes": list(nodes.values()), "edges": edges}
+
     async def list_products(self, page: int = 1, page_size: int = 25,
                             search: str | None = None) -> dict:
         """List Part nodes from Neo4j with optional search and pagination."""

@@ -204,3 +204,49 @@ async def test_extract_sds_fields_partial_response():
         fields = await svc.extract_sds_fields("some sds text")
         assert fields == {"ghs_classification": "Flammable"}
         assert "cas_numbers" not in fields
+
+
+@pytest.mark.asyncio
+async def test_extract_tds_fields_with_confidence():
+    from services.document_service import DocumentService
+    svc = DocumentService(MagicMock())
+    with patch.object(svc, '_call_llm', new_callable=AsyncMock) as mock_llm:
+        mock_llm.return_value = {
+            "appearance": {"value": "White powder", "confidence": 0.95},
+            "density": {"value": "1.21 g/cm³", "confidence": 0.92},
+            "flash_point": {"value": "N/A", "confidence": 0.88},
+            "viscosity": {"value": "1200-4500 cP", "confidence": 0.91},
+            "pH": {"value": "5.0-8.0", "confidence": 0.85},
+            "boiling_point": {"value": "100°C", "confidence": 0.70},
+            "melting_point": {"value": "65°C", "confidence": 0.75},
+            "solubility": {"value": "Soluble in water", "confidence": 0.93},
+            "shelf_life": {"value": "24 months", "confidence": 0.60},
+            "storage_conditions": {"value": "Cool, dry place", "confidence": 0.90},
+            "recommended_uses": {"value": ["Adhesives", "Coatings"], "confidence": 0.87},
+        }
+        fields = await svc.extract_tds_fields_with_confidence("sample tds text")
+        assert fields["appearance"]["confidence"] == 0.95
+        assert fields["density"]["value"] == "1.21 g/cm³"
+        assert fields["shelf_life"]["confidence"] < 0.7
+
+
+@pytest.mark.asyncio
+async def test_extract_sds_fields_with_confidence():
+    from services.document_service import DocumentService
+    svc = DocumentService(MagicMock())
+    with patch.object(svc, '_call_llm', new_callable=AsyncMock) as mock_llm:
+        mock_llm.return_value = {
+            "ghs_classification": {"value": "Not classified", "confidence": 0.97},
+            "cas_numbers": {"value": ["25322-68-3"], "confidence": 0.99},
+            "un_number": {"value": "N/A", "confidence": 0.85},
+            "hazard_statements": {"value": [], "confidence": 0.90},
+            "precautionary_statements": {"value": ["P264"], "confidence": 0.82},
+            "first_aid": {"value": "Move to fresh air", "confidence": 0.88},
+            "ppe_requirements": {"value": "Safety glasses, gloves", "confidence": 0.91},
+            "fire_fighting": {"value": "Use water spray", "confidence": 0.78},
+            "environmental_hazards": {"value": "No known hazards", "confidence": 0.80},
+            "transport_info": {"value": "Not regulated", "confidence": 0.93},
+        }
+        fields = await svc.extract_sds_fields_with_confidence("sample sds text")
+        assert fields["cas_numbers"]["confidence"] == 0.99
+        assert fields["ghs_classification"]["value"] == "Not classified"

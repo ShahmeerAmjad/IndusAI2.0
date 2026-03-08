@@ -32,6 +32,9 @@ neo4j>=5.20,<6.0
 openpyxl>=3.1,<4.0
 reportlab>=4.0,<5.0
 
+# CLI Tools
+rich>=13.0,<14.0
+
 # Security & Auth
 PyJWT>=2.8,<3.0
 bcrypt>=4.0,<5.0

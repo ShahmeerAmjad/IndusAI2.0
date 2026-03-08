@@ -44,6 +44,20 @@ def _get_svc():
 # ---------------------------------------------------------------------------
 
 
+@router.get("/graph-viz")
+async def graph_visualization(
+    industry: Optional[str] = Query(None),
+    manufacturer: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Return nodes and edges for frontend graph visualization."""
+    svc = _get_svc()
+    data = await svc.get_graph_visualization(
+        industry=industry, manufacturer=manufacturer, limit=limit,
+    )
+    return data
+
+
 @router.get("/products")
 async def list_products(
     page: int = Query(1, ge=1),

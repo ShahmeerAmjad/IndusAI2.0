@@ -106,6 +106,7 @@ from routes.inbox import router as inbox_router, set_inbox_services
 from routes.documents import router as documents_router, set_document_services
 from routes.customer_accounts import router as customer_accounts_router, set_customer_account_services
 from routes.knowledge_base import router as kb_router, set_kb_service, set_chempoint_scraper
+from routes.ingestion_ws import router as ingestion_ws_router, set_ingestion_pipeline
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -700,7 +701,8 @@ async def lifespan(app: FastAPI):
                 graph_service=_tds_sds, db_manager=db_manager,
             )
             set_seed_pipeline(seed_pipeline)
-            logger.info("Seed-chempoint pipeline ready")
+            set_ingestion_pipeline(seed_pipeline)
+            logger.info("Seed-chempoint pipeline ready (with WebSocket ingestion)")
 
         logger.info("Multi-intent classifier, auto-response engine & API routes ready")
     except Exception as e:
@@ -755,6 +757,7 @@ app.include_router(inbox_router)
 app.include_router(documents_router)
 app.include_router(customer_accounts_router)
 app.include_router(kb_router)
+app.include_router(ingestion_ws_router)
 
 # Rate limiter
 app.state.limiter = limiter

@@ -24,6 +24,37 @@ Omit keys if data is not present. Text:
 
 {text}"""
 
+TDS_CONFIDENCE_PROMPT = """Extract ALL of the following fields from this Technical Data Sheet.
+For each field, return a JSON object with "value" and "confidence" (0.0-1.0).
+Confidence reflects how certain you are the extracted value is correct.
+If a field is not found, return {{"value": null, "confidence": 0.0}}.
+
+Fields to extract:
+- appearance, color, odor, density, viscosity, pH, flash_point
+- boiling_point, melting_point, solubility, molecular_weight
+- shelf_life, storage_conditions, recommended_uses (list)
+
+Return ONLY valid JSON object. No markdown.
+
+Text:
+{text}"""
+
+SDS_CONFIDENCE_PROMPT = """Extract ALL of the following fields from this Safety Data Sheet.
+For each field, return a JSON object with "value" and "confidence" (0.0-1.0).
+Confidence reflects how certain you are the extracted value is correct.
+If a field is not found, return {{"value": null, "confidence": 0.0}}.
+
+Fields to extract:
+- ghs_classification, hazard_statements (list), precautionary_statements (list)
+- cas_numbers (list), un_number, dot_class
+- first_aid, fire_fighting, ppe_requirements
+- environmental_hazards, disposal_methods, transport_info
+
+Return ONLY valid JSON object. No markdown.
+
+Text:
+{text}"""
+
 
 class DocumentService:
     def __init__(self, db_manager, ai_service=None):
@@ -51,6 +82,14 @@ class DocumentService:
                 len(file_bytes), source_url,
             )
         return dict(row)
+
+    async def extract_tds_fields_with_confidence(self, text: str) -> dict:
+        """Extract TDS fields with per-field confidence scores."""
+        return await self._call_llm(TDS_CONFIDENCE_PROMPT.format(text=text[:8000]))
+
+    async def extract_sds_fields_with_confidence(self, text: str) -> dict:
+        """Extract SDS fields with per-field confidence scores."""
+        return await self._call_llm(SDS_CONFIDENCE_PROMPT.format(text=text[:8000]))
 
     async def extract_tds_fields(self, text: str) -> dict:
         """Use LLM to extract structured TDS fields from raw text."""

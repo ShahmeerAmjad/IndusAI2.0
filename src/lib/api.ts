@@ -381,6 +381,38 @@ export interface DocumentMeta {
   created_at?: string;
 }
 
+export interface IngestionEvent {
+  stage: string;
+  product?: string;
+  current?: number;
+  total?: number;
+  detail?: string;
+  result?: Record<string, number>;
+}
+
+export interface IngestionJob {
+  job_id: string;
+  status: "running" | "completed" | "failed";
+  events: IngestionEvent[];
+  result?: Record<string, number>;
+  error?: string;
+}
+
+export interface GraphVizData {
+  nodes: Array<{
+    id: string;
+    label: string;
+    name: string;
+    color: string;
+    properties: Record<string, unknown>;
+  }>;
+  edges: Array<{
+    source: string;
+    target: string;
+    relationship: string;
+  }>;
+}
+
 // ---------- API Functions ----------
 
 export const api = {
@@ -518,4 +550,23 @@ export const api = {
     get<{ accounts: CustomerAccount[]; limit: number; offset: number }>(`/customer-accounts?limit=${limit}&offset=${offset}`),
   getCustomerAccount: (id: string) => get<CustomerAccount>(`/customer-accounts/${id}`),
   lookupCustomerByEmail: (email: string) => get<CustomerAccount>(`/customer-accounts/lookup?email=${encodeURIComponent(email)}`),
+
+  // Ingestion
+  startIngestion: (url: string) =>
+    post<{ job_id: string; status: string }>("/ingestion/start", { url }),
+  startBatchIngestion: (industryUrls: string[], maxProducts = 50) =>
+    post<{ job_id: string; status: string }>("/ingestion/start-batch", {
+      industry_urls: industryUrls,
+      max_products: maxProducts,
+    }),
+  getIngestionJob: (jobId: string) => get<IngestionJob>(`/ingestion/jobs/${jobId}`),
+
+  // Graph Visualization
+  getGraphViz: (industry?: string, manufacturer?: string) => {
+    const params = new URLSearchParams();
+    if (industry) params.set("industry", industry);
+    if (manufacturer) params.set("manufacturer", manufacturer);
+    const qs = params.toString();
+    return get<GraphVizData>(`/knowledge-base/graph-viz${qs ? `?${qs}` : ""}`);
+  },
 };
