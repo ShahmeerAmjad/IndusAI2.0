@@ -11,9 +11,13 @@ logger = logging.getLogger(__name__)
 TASK_MODELS = {
     "intent_classification": "fast",
     "entity_extraction": "fast",
+    "chempoint_extraction": "fast",
+    "chempoint_navigation": "fast",
     "response_generation": "standard",
     "catalog_normalization": "standard",
     "graph_construction": "standard",
+    "tds_extraction": "standard",
+    "sds_extraction": "standard",
     "complex_reasoning": "heavy",
 }
 
@@ -43,6 +47,34 @@ class LLMRouter:
         return await self._claude.chat(
             messages, system=system, model=model_tier,
             max_tokens=max_tokens, temperature=temperature
+        )
+
+    async def chat_with_compaction(
+        self,
+        messages: list[dict],
+        task: str = "response_generation",
+        max_tokens: int = 1024,
+        temperature: float = 0.3,
+        system: str | None = None,
+        compaction_control: dict | None = None,
+    ) -> str:
+        """Chat with optional automatic context compaction for batch processing.
+
+        When compaction_control is provided, uses the Anthropic SDK's
+        compaction to manage context window in long loops.
+        When None, falls back to regular chat.
+        """
+        if not compaction_control:
+            return await self.chat(
+                messages=messages, system=system, task=task,
+                max_tokens=max_tokens, temperature=temperature,
+            )
+
+        model_tier = TASK_MODELS.get(task, "standard")
+        return await self._claude.chat_with_compaction(
+            messages, system=system, model=model_tier,
+            max_tokens=max_tokens, temperature=temperature,
+            compaction_control=compaction_control,
         )
 
     async def embed(self, texts: list[str], input_type: str = "document") -> list[list[float]]:
