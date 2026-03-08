@@ -195,6 +195,46 @@ class AutoResponseEngine:
             logger.error("LLM response generation failed: %s", exc)
             return "[Draft generation failed — manual response required]"
 
+    async def batch_process_inbox(
+        self,
+        emails: list[dict],
+        on_progress=None,
+    ) -> list[dict]:
+        """Process a batch of classified emails, generating drafts for each.
+
+        Args:
+            emails: List of dicts with keys: id, body, classification, customer_account (optional)
+            on_progress: Optional callback for progress events
+
+        Returns:
+            List of draft results (same shape as generate_draft output)
+        """
+        _emit = on_progress or (lambda e: None)
+        results = []
+
+        for i, email in enumerate(emails):
+            _emit({"stage": "processing", "current": i + 1,
+                   "total": len(emails), "email_id": email.get("id")})
+            try:
+                draft = await self.generate_draft(
+                    body=email["body"],
+                    classification=email["classification"],
+                    customer_account=email.get("customer_account"),
+                )
+                results.append(draft)
+            except Exception as exc:
+                logger.warning("Batch draft failed for %s: %s", email.get("id"), exc)
+                results.append({
+                    "response_text": "",
+                    "attachments": [],
+                    "confidence": 0.0,
+                    "metadata": {"error": str(exc), "email_id": email.get("id")},
+                })
+
+        _emit({"stage": "done", "total_processed": len(results),
+               "successful": sum(1 for r in results if r["response_text"])})
+        return results
+
     # ------------------------------------------------------------------
     # Per-intent context gatherers
     # ------------------------------------------------------------------

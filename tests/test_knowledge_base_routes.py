@@ -77,6 +77,17 @@ class TestListProducts:
         )
 
     @pytest.mark.asyncio
+    async def test_list_products_includes_total(self, setup_services):
+        setup_services["svc"].list_products = AsyncMock(return_value={
+            "items": [{"sku": "X-1", "name": "Product X"}],
+            "page": 1, "page_size": 25, "total": 42,
+        })
+        from routes.knowledge_base import list_products
+        result = await list_products(page=1, page_size=25, search=None)
+        assert "total" in result
+        assert result["total"] == 42
+
+    @pytest.mark.asyncio
     async def test_list_products_service_unavailable(self):
         set_kb_service(None)
         from routes.knowledge_base import list_products
@@ -97,6 +108,19 @@ class TestGetProduct:
         assert result["manufacturer"] == "Hexion"
         assert "Adhesives" in result["industries"]
         setup_services["svc"].get_product.assert_called_once_with("CP-001")
+
+    @pytest.mark.asyncio
+    async def test_get_product_includes_doc_urls(self, setup_services):
+        setup_services["svc"].get_product = AsyncMock(return_value={
+            "sku": "NOVEC-72DA", "name": "Novec 72DA",
+            "manufacturer": "3M",
+            "tds_url": "https://example.com/tds.pdf",
+            "sds_url": "https://example.com/sds.pdf",
+        })
+        from routes.knowledge_base import get_product
+        result = await get_product("NOVEC-72DA")
+        assert result["tds_url"] == "https://example.com/tds.pdf"
+        assert result["sds_url"] == "https://example.com/sds.pdf"
 
     @pytest.mark.asyncio
     async def test_get_product_not_found(self, setup_services):

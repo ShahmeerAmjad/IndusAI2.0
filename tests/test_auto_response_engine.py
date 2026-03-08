@@ -218,6 +218,70 @@ class TestConfidenceCalculation:
         assert conf == round(0.85 * 0.75, 3)
 
 
+class TestBatchProcessInbox:
+    """Test batch email processing."""
+
+    @pytest.mark.asyncio
+    async def test_batch_process_inbox(self, engine):
+        """batch_process_inbox should process multiple emails and return aggregate stats."""
+        emails = [
+            {"id": "msg-1", "body": "Need TDS for product EP-200",
+             "classification": _make_classification(IntentType.REQUEST_TDS_SDS,
+                                                     entities=EntityResult(part_numbers=["EP-200"]))},
+            {"id": "msg-2", "body": "Quote for product EP-200",
+             "classification": _make_classification(IntentType.REQUEST_QUOTE,
+                                                     entities=EntityResult(part_numbers=["EP-200"],
+                                                                           quantities={"EP-200": 50}))},
+        ]
+
+        results = await engine.batch_process_inbox(emails)
+
+        assert len(results) == 2
+        assert all(r["response_text"] for r in results)
+        assert results[0]["metadata"]["intents"] == ["request_tds_sds"]
+
+    @pytest.mark.asyncio
+    async def test_batch_process_inbox_with_error(self, engine, mock_llm):
+        """If one email fails, others should still be processed."""
+        call_count = 0
+        async def flaky_chat(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("LLM timeout")
+            return "Draft response"
+
+        mock_llm.chat.side_effect = flaky_chat
+
+        emails = [
+            {"id": "msg-1", "body": "Hello",
+             "classification": _make_classification(IntentType.REQUEST_QUOTE,
+                                                     entities=EntityResult(part_numbers=["EP-200"]))},
+            {"id": "msg-2", "body": "World",
+             "classification": _make_classification(IntentType.ORDER_STATUS,
+                                                     entities=EntityResult(order_numbers=["PO-1"]))},
+        ]
+
+        results = await engine.batch_process_inbox(emails)
+        assert len(results) == 2
+        # First failed, second should succeed
+        assert any(r["response_text"] for r in results)
+
+    @pytest.mark.asyncio
+    async def test_batch_process_inbox_progress_callback(self, engine):
+        """Progress callback should be called for each email."""
+        progress_events = []
+        emails = [
+            {"id": "msg-1", "body": "Test",
+             "classification": _make_classification(IntentType.ORDER_STATUS,
+                                                     entities=EntityResult(order_numbers=["PO-1"]))},
+        ]
+
+        await engine.batch_process_inbox(emails, on_progress=progress_events.append)
+        assert any(e.get("stage") == "processing" for e in progress_events)
+        assert any(e.get("stage") == "done" for e in progress_events)
+
+
 class TestModuleDI:
     def test_set_get_response_engine(self):
         from services.auto_response_engine import set_response_engine, get_response_engine

@@ -19,9 +19,9 @@ export default function KnowledgeBase() {
   const [query, setQuery] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const { data: searchResults, isLoading } = useQuery({
-    queryKey: ["kb-search", searchTerm],
-    queryFn: () => api.searchGraph(searchTerm, 30),
+  const { data: searchData, isLoading } = useQuery({
+    queryKey: ["kb-products", searchTerm],
+    queryFn: () => api.searchProducts(searchTerm),
     enabled: searchTerm.length >= 2,
   });
 
@@ -30,7 +30,7 @@ export default function KnowledgeBase() {
     setSearchTerm(query.trim());
   };
 
-  const results = searchResults?.results ?? [];
+  const results = searchData?.items ?? [];
 
   return (
     <div className="space-y-6">
@@ -101,9 +101,11 @@ export default function KnowledgeBase() {
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-sm text-neutral-500">{results.length} results</p>
-              {results.map((r) => (
-                <ProductCard key={r.node.sku} part={r.node} score={r.score} />
+              <p className="text-sm text-neutral-500">
+                {searchData?.total ?? results.length} results
+              </p>
+              {results.map((p) => (
+                <ProductCard key={p.sku} part={p} />
               ))}
             </div>
           )}
@@ -119,7 +121,7 @@ export default function KnowledgeBase() {
   );
 }
 
-function ProductCard({ part, score }: { part: GraphPart; score: number }) {
+function ProductCard({ part }: { part: GraphPart }) {
   const [expanded, setExpanded] = useState(false);
 
   const { data: docs } = useQuery({
@@ -152,8 +154,6 @@ function ProductCard({ part, score }: { part: GraphPart; score: number }) {
                 <span>{part.category}</span>
               </>
             )}
-            <span>&middot;</span>
-            <span>Score: {score.toFixed(2)}</span>
           </div>
           {part.description && (
             <p className="mt-1 line-clamp-2 text-sm text-neutral-500">{part.description}</p>
