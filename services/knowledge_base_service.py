@@ -201,6 +201,13 @@ class KnowledgeBaseService:
         params: dict = {"skip": skip, "limit": page_size}
 
         if search:
+            count_query = """
+            MATCH (p:Part)
+            WHERE toLower(p.name) CONTAINS toLower($search)
+               OR toLower(p.sku) CONTAINS toLower($search)
+               OR toLower(p.cas_number) CONTAINS toLower($search)
+            RETURN count(p) AS total
+            """
             query = """
             MATCH (p:Part)
             WHERE toLower(p.name) CONTAINS toLower($search)
@@ -212,6 +219,7 @@ class KnowledgeBaseService:
             """
             params["search"] = search
         else:
+            count_query = "MATCH (p:Part) RETURN count(p) AS total"
             query = """
             MATCH (p:Part)
             RETURN p {.*}
@@ -219,9 +227,13 @@ class KnowledgeBaseService:
             SKIP $skip LIMIT $limit
             """
 
+        count_params = {k: v for k, v in params.items() if k == "search"}
+        count_result = await self._graph.execute_read(count_query, count_params)
+        total = count_result[0]["total"] if count_result else 0
+
         results = await self._graph.execute_read(query, params)
         items = [row["p"] for row in results]
-        return {"items": items, "page": page, "page_size": page_size}
+        return {"items": items, "page": page, "page_size": page_size, "total": total}
 
     async def get_product(self, product_id: str) -> dict | None:
         """Get a single product with manufacturer, product line, industries, and doc URLs."""
