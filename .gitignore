@@ -39,3 +39,6 @@ venv/
 # Archives / temp
 *.zip
 _extracted/
+
+# Git worktrees
+.worktrees/
