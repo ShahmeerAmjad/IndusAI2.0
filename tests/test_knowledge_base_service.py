@@ -181,9 +181,10 @@ async def test_list_products_basic():
     from services.knowledge_base_service import KnowledgeBaseService
 
     graph = AsyncMock()
-    graph.execute_read = AsyncMock(return_value=[
-        {"p": {"name": "Product A", "sku": "CP-AAA"}},
-        {"p": {"name": "Product B", "sku": "CP-BBB"}},
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"total": 2}],  # count query
+        [{"p": {"name": "Product A", "sku": "CP-AAA"}},
+         {"p": {"name": "Product B", "sku": "CP-BBB"}}],  # data query
     ])
     svc = KnowledgeBaseService(None, graph)
 
@@ -192,7 +193,8 @@ async def test_list_products_basic():
     assert len(result["items"]) == 2
     assert result["page"] == 1
     assert result["page_size"] == 25
-    graph.execute_read.assert_called_once()
+    assert result["total"] == 2
+    assert graph.execute_read.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -200,15 +202,17 @@ async def test_list_products_with_search():
     from services.knowledge_base_service import KnowledgeBaseService
 
     graph = AsyncMock()
-    graph.execute_read = AsyncMock(return_value=[
-        {"p": {"name": "POLYOX WSR-301", "sku": "CP-AAA"}},
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"total": 1}],  # count query
+        [{"p": {"name": "POLYOX WSR-301", "sku": "CP-AAA"}}],  # data query
     ])
     svc = KnowledgeBaseService(None, graph)
 
     result = await svc.list_products(search="polyox")
 
     assert len(result["items"]) == 1
-    # Verify the search term was passed in the query params
+    assert result["total"] == 1
+    # Verify the search term was passed in the data query params
     call_args = graph.execute_read.call_args
     params = call_args[0][1]  # second positional arg is the params dict
     assert params["search"] == "polyox"
@@ -219,15 +223,20 @@ async def test_list_products_pagination():
     from services.knowledge_base_service import KnowledgeBaseService
 
     graph = AsyncMock()
-    graph.execute_read = AsyncMock(return_value=[])
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"total": 0}],  # count query
+        [],  # data query
+    ])
     svc = KnowledgeBaseService(None, graph)
 
     result = await svc.list_products(page=3, page_size=10)
 
     assert result["page"] == 3
     assert result["page_size"] == 10
+    assert result["total"] == 0
+    # Verify skip/limit on the data query (second call)
     call_args = graph.execute_read.call_args
-    params = call_args[0][1]  # second positional arg is the params dict
+    params = call_args[0][1]
     assert params["skip"] == 20
     assert params["limit"] == 10
 
