@@ -32,31 +32,34 @@ def cleanup():
 class TestBroadcast:
     """Test the _broadcast helper."""
 
-    def test_broadcast_stores_event(self):
+    @pytest.mark.asyncio
+    async def test_broadcast_stores_event(self):
         job_id = "test-job"
         _job_events[job_id] = []
         _job_subscribers[job_id] = []
 
-        _broadcast(job_id, {"stage": "processing", "product": "EP-200"})
+        await _broadcast(job_id, {"stage": "processing", "product": "EP-200"})
 
         assert len(_job_events[job_id]) == 1
         assert _job_events[job_id][0]["stage"] == "processing"
 
-    def test_broadcast_multiple_events(self):
+    @pytest.mark.asyncio
+    async def test_broadcast_multiple_events(self):
         job_id = "test-job"
         _job_events[job_id] = []
         _job_subscribers[job_id] = []
 
-        _broadcast(job_id, {"stage": "processing", "current": 1})
-        _broadcast(job_id, {"stage": "processing", "current": 2})
-        _broadcast(job_id, {"stage": "done", "result": {}})
+        await _broadcast(job_id, {"stage": "processing", "current": 1})
+        await _broadcast(job_id, {"stage": "processing", "current": 2})
+        await _broadcast(job_id, {"stage": "done", "result": {}})
 
         assert len(_job_events[job_id]) == 3
         assert _job_events[job_id][-1]["stage"] == "done"
 
-    def test_broadcast_unknown_job_no_crash(self):
+    @pytest.mark.asyncio
+    async def test_broadcast_unknown_job_no_crash(self):
         """Broadcasting to an unknown job should not crash."""
-        _broadcast("nonexistent", {"stage": "test"})
+        await _broadcast("nonexistent", {"stage": "test"})
         assert "nonexistent" not in _job_events
 
 
