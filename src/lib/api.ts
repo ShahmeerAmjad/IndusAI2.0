@@ -508,6 +508,10 @@ export const api = {
   // Knowledge Graph
   getGraphPart: (sku: string) => get<GraphPart>(`/graph/parts/${sku}`),
   searchGraph: (q: string, limit = 20) => get<GraphSearchResult>(`/graph/parts/search/fulltext?q=${encodeURIComponent(q)}&limit=${limit}`),
+  searchProducts: (q: string, page = 1, pageSize = 25) =>
+    get<{ items: GraphPart[]; page: number; page_size: number; total: number }>(
+      `/knowledge-base/products?search=${encodeURIComponent(q)}&page=${page}&page_size=${pageSize}`
+    ),
   getGraphStats: () => get<GraphStats>("/graph/stats"),
 
   // Admin
