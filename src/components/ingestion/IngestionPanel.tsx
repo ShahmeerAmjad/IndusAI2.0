@@ -98,7 +98,15 @@ export default function IngestionPanel() {
     },
   });
 
+  const cancelJob = useMutation({
+    mutationFn: () => jobId ? api.cancelIngestion(jobId) : Promise.reject("No job"),
+    onSuccess: () => {
+      setEvents(prev => [...prev, { stage: "cancelled", detail: "Cancelled by user" }]);
+    },
+  });
+
   const isRunning = job?.status === "running" || startSingle.isPending || startBatch.isPending;
+  const isCancelled = events.some((e) => e.stage === "cancelled");
   const isDone = events.some((e) => e.stage === "done");
   const lastEvent = events[events.length - 1];
   const productCount = events.filter((e) => e.stage === "building_graph").length;
@@ -193,6 +201,16 @@ export default function IngestionPanel() {
               <div className="h-full rounded-full bg-blue-500 transition-all duration-300"
                 style={{ width: `${(lastEvent.current / lastEvent.total) * 100}%` }} />
             </div>
+          )}
+
+          {jobId && !isDone && !isCancelled && (
+            <button
+              onClick={() => cancelJob.mutate()}
+              className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+              disabled={cancelJob.isPending}
+            >
+              {cancelJob.isPending ? "Cancelling..." : "Cancel"}
+            </button>
           )}
 
           <div ref={logRef}

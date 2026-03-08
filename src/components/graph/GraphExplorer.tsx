@@ -1,188 +1,190 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, type GraphVizData } from "@/lib/api";
-import { Network } from "lucide-react";
+import ForceGraph2D from "react-force-graph-2d";
+import { api } from "@/lib/api";
+import { Search } from "lucide-react";
+
+const NODE_COLORS: Record<string, string> = {
+  Product: "#1e3a8a",
+  Manufacturer: "#059669",
+  ProductLine: "#0d9488",
+  Industry: "#f59e0b",
+  TDS: "#7c3aed",
+  SDS: "#dc2626",
+};
+
+const NODE_SIZES: Record<string, number> = {
+  Product: 8,
+  Manufacturer: 6,
+  ProductLine: 6,
+  Industry: 6,
+  TDS: 4,
+  SDS: 4,
+};
+
+type GraphNode = {
+  id: string;
+  label: string;
+  name: string;
+  color: string;
+  properties: Record<string, unknown>;
+};
+type GraphEdge = { source: string; target: string; relationship: string };
 
 export default function GraphExplorer() {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [industry, setIndustry] = useState<string>("");
-  const [selectedNode, setSelectedNode] = useState<Record<string, unknown> | null>(null);
+  const [manufacturer, setManufacturer] = useState<string>("");
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [depth, setDepth] = useState<"products" | "products+docs" | "full">("full");
+  const graphRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["graph-viz", industry],
-    queryFn: () => api.getGraphViz(industry || undefined),
+  const { data: vizData, isLoading } = useQuery({
+    queryKey: ["graph-viz", industry, manufacturer],
+    queryFn: () => api.getGraphViz(industry || undefined, manufacturer || undefined),
   });
 
-  useEffect(() => {
-    if (!data || !containerRef.current) return;
-    renderGraph(data);
-  }, [data]);
+  const { data: industries } = useQuery({
+    queryKey: ["industries"],
+    queryFn: () => api.getIndustries(),
+  });
 
-  const renderGraph = (vizData: GraphVizData) => {
-    const container = containerRef.current;
-    if (!container) return;
+  // Filter nodes by depth
+  const filteredData = useCallback(() => {
+    if (!vizData) return { nodes: [], links: [] };
+    let nodes = vizData.nodes as GraphNode[];
+    let edges = vizData.edges as GraphEdge[];
 
-    container.innerHTML = "";
-    const canvas = document.createElement("canvas");
-    canvas.width = container.clientWidth;
-    canvas.height = 500;
-    container.appendChild(canvas);
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const nodes = vizData.nodes.map((n, i) => ({
-      ...n,
-      x: Math.cos((i / vizData.nodes.length) * Math.PI * 2) * 200 + canvas.width / 2,
-      y: Math.sin((i / vizData.nodes.length) * Math.PI * 2) * 200 + canvas.height / 2,
-      radius: n.label === "Product" ? 20 : 14,
-    }));
-
-    const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
-
-    // Simple force simulation
-    for (let iter = 0; iter < 50; iter++) {
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dx = nodes[j].x - nodes[i].x;
-          const dy = nodes[j].y - nodes[i].y;
-          const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-          const force = 2000 / (dist * dist);
-          nodes[i].x -= (dx / dist) * force;
-          nodes[i].y -= (dy / dist) * force;
-          nodes[j].x += (dx / dist) * force;
-          nodes[j].y += (dy / dist) * force;
-        }
-      }
-      for (const edge of vizData.edges) {
-        const s = nodeMap[edge.source];
-        const t = nodeMap[edge.target];
-        if (!s || !t) continue;
-        const dx = t.x - s.x;
-        const dy = t.y - s.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const force = (dist - 120) * 0.01;
-        s.x += (dx / dist) * force;
-        s.y += (dy / dist) * force;
-        t.x -= (dx / dist) * force;
-        t.y -= (dy / dist) * force;
-      }
-      for (const n of nodes) {
-        n.x += (canvas.width / 2 - n.x) * 0.01;
-        n.y += (canvas.height / 2 - n.y) * 0.01;
-      }
+    if (depth === "products") {
+      nodes = nodes.filter((n) => n.label === "Product");
+      const nodeIds = new Set(nodes.map((n) => n.id));
+      edges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+    } else if (depth === "products+docs") {
+      nodes = nodes.filter((n) => ["Product", "TDS", "SDS"].includes(n.label));
+      const nodeIds = new Set(nodes.map((n) => n.id));
+      edges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
     }
 
-    // Draw edges
-    ctx.strokeStyle = "#e2e8f0";
-    ctx.lineWidth = 1;
-    for (const edge of vizData.edges) {
-      const s = nodeMap[edge.source];
-      const t = nodeMap[edge.target];
-      if (!s || !t) continue;
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(t.x, t.y);
-      ctx.stroke();
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = "9px sans-serif";
-      ctx.fillText(edge.relationship, (s.x + t.x) / 2, (s.y + t.y) / 2 - 4);
-    }
-
-    // Draw nodes
-    for (const node of nodes) {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-      ctx.fillStyle = node.color;
-      ctx.fill();
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.fillStyle = "#1e293b";
-      ctx.font = "bold 10px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(node.name.substring(0, 20), node.x, node.y + node.radius + 14);
-      ctx.fillStyle = node.color;
-      ctx.font = "8px sans-serif";
-      ctx.fillText(node.label, node.x, node.y + node.radius + 24);
-    }
-
-    canvas.onclick = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      for (const node of nodes) {
-        const dx = mx - node.x;
-        const dy = my - node.y;
-        if (dx * dx + dy * dy < node.radius * node.radius) {
-          setSelectedNode(node.properties);
-          return;
-        }
-      }
-      setSelectedNode(null);
+    return {
+      nodes,
+      links: edges.map((e) => ({ source: e.source, target: e.target, label: e.relationship })),
     };
-  };
+  }, [vizData, depth]);
 
-  const INDUSTRIES = [
-    "", "Adhesives", "Coatings", "Pharma", "Personal Care",
-    "Water Treatment", "Plastics", "Energy",
-  ];
+  const handleNodeClick = useCallback((node: any) => {
+    setSelectedNode(node as GraphNode);
+    if (graphRef.current) {
+      graphRef.current.centerAt(node.x, node.y, 500);
+      graphRef.current.zoom(3, 500);
+    }
+  }, []);
+
+  const handleNodeDoubleClick = useCallback((node: any) => {
+    if (graphRef.current) {
+      graphRef.current.centerAt(node.x, node.y, 300);
+      graphRef.current.zoom(5, 300);
+    }
+  }, []);
+
+  const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      setDimensions({ width, height: Math.max(height, 400) });
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const graphData = filteredData();
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Network size={18} className="text-purple-600" />
-          <h3 className="text-lg font-bold text-slate-800">Knowledge Graph Explorer</h3>
-        </div>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 items-center">
         <select value={industry} onChange={(e) => setIndustry(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+          className="border rounded px-3 py-1.5 text-sm">
           <option value="">All Industries</option>
-          {INDUSTRIES.filter(Boolean).map((i) => (
-            <option key={i} value={i}>{i}</option>
+          {(industries || []).map((ind: string) => (
+            <option key={ind} value={ind}>{ind}</option>
           ))}
         </select>
+        <select value={depth} onChange={(e) => setDepth(e.target.value as any)}
+          className="border rounded px-3 py-1.5 text-sm">
+          <option value="full">Full Graph</option>
+          <option value="products+docs">Products + Documents</option>
+          <option value="products">Products Only</option>
+        </select>
+        <span className="text-xs text-gray-500">
+          {graphData.nodes.length} nodes &middot; {graphData.links.length} edges
+        </span>
       </div>
 
+      {/* Graph */}
+      <div ref={containerRef} className="border rounded-lg bg-gray-50 relative" style={{ height: 500 }}>
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full text-gray-400">Loading graph...</div>
+        ) : (
+          <ForceGraph2D
+            ref={graphRef}
+            graphData={graphData}
+            width={dimensions.width}
+            height={dimensions.height}
+            nodeLabel={(node: any) => `${node.label}: ${node.name}`}
+            nodeColor={(node: any) => NODE_COLORS[node.label] || "#666"}
+            nodeVal={(node: any) => NODE_SIZES[node.label] || 4}
+            linkLabel={(link: any) => link.label}
+            linkColor={() => "#d1d5db"}
+            linkDirectionalArrowLength={3}
+            onNodeClick={handleNodeClick}
+            onNodeDblClick={handleNodeDoubleClick}
+            nodeCanvasObjectMode={() => "after"}
+            nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+              if (globalScale < 1.5) return; // Hide labels when zoomed out
+              const label = node.name?.substring(0, 25) || "";
+              const fontSize = 10 / globalScale;
+              ctx.font = `${fontSize}px Sans-Serif`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillStyle = "#374151";
+              ctx.fillText(label, node.x, node.y + 10 / globalScale);
+            }}
+          />
+        )}
+      </div>
+
+      {/* Legend */}
       <div className="flex flex-wrap gap-3 text-xs">
-        {[
-          { label: "Product", color: "#1e3a8a" },
-          { label: "TDS", color: "#7c3aed" },
-          { label: "SDS", color: "#dc2626" },
-          { label: "Industry", color: "#f59e0b" },
-          { label: "ProductLine", color: "#0d9488" },
-          { label: "Manufacturer", color: "#059669" },
-        ].map(({ label, color }) => (
-          <span key={label} className="flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
+        {Object.entries(NODE_COLORS).map(([label, color]) => (
+          <div key={label} className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: color }} />
             {label}
-          </span>
+          </div>
         ))}
       </div>
 
-      <div ref={containerRef}
-        className="relative min-h-[500px] rounded-xl border border-slate-200 bg-slate-50">
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-purple-600" />
-          </div>
-        )}
-        {!isLoading && (!data || data.nodes.length === 0) && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
-            <Network size={40} className="mb-3" />
-            <p>No graph data yet. Run ingestion to populate.</p>
-          </div>
-        )}
-      </div>
-
+      {/* Selected node panel */}
       {selectedNode && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h4 className="mb-2 text-sm font-semibold text-slate-700">Node Properties</h4>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            {Object.entries(selectedNode).map(([k, v]) => (
-              <div key={k} className="rounded bg-slate-50 px-2 py-1">
-                <span className="text-slate-400">{k}: </span>
-                <span className="font-medium text-slate-700">{String(v)}</span>
+        <div className="border rounded-lg p-4 bg-white shadow-sm">
+          <div className="flex justify-between items-start">
+            <div>
+              <span className="text-xs font-medium px-2 py-0.5 rounded"
+                style={{ backgroundColor: NODE_COLORS[selectedNode.label] + "20",
+                         color: NODE_COLORS[selectedNode.label] }}>
+                {selectedNode.label}
+              </span>
+              <h3 className="font-semibold mt-1">{selectedNode.name}</h3>
+            </div>
+            <button onClick={() => setSelectedNode(null)}
+              className="text-gray-400 hover:text-gray-600 text-sm">&times;</button>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
+            {Object.entries(selectedNode.properties || {}).map(([k, v]) => (
+              <div key={k}>
+                <span className="text-gray-500">{k}:</span>{" "}
+                <span>{String(v)}</span>
               </div>
             ))}
           </div>

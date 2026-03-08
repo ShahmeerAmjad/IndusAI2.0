@@ -564,6 +564,8 @@ export const api = {
       max_products: maxProducts,
     }),
   getIngestionJob: (jobId: string) => get<IngestionJob>(`/ingestion/jobs/${jobId}`),
+  cancelIngestion: (jobId: string) =>
+    post<{ job_id: string; status: string }>(`/ingestion/jobs/${jobId}/cancel`, {}),
 
   // Graph Visualization
   getGraphViz: (industry?: string, manufacturer?: string) => {
