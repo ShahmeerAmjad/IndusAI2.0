@@ -264,7 +264,7 @@ class KnowledgeBaseService:
             async with self._pool.acquire() as conn:
                 docs = await conn.fetch(
                     """SELECT doc_type, source_url FROM documents
-                       WHERE file_name = $1 AND is_current = true
+                       WHERE product_id = $1 AND is_current = true
                        ORDER BY created_at DESC""",
                     product_id,
                 )

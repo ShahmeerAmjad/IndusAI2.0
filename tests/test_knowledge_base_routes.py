@@ -110,6 +110,19 @@ class TestGetProduct:
         setup_services["svc"].get_product.assert_called_once_with("CP-001")
 
     @pytest.mark.asyncio
+    async def test_get_product_includes_doc_urls(self, setup_services):
+        setup_services["svc"].get_product = AsyncMock(return_value={
+            "sku": "NOVEC-72DA", "name": "Novec 72DA",
+            "manufacturer": "3M",
+            "tds_url": "https://example.com/tds.pdf",
+            "sds_url": "https://example.com/sds.pdf",
+        })
+        from routes.knowledge_base import get_product
+        result = await get_product("NOVEC-72DA")
+        assert result["tds_url"] == "https://example.com/tds.pdf"
+        assert result["sds_url"] == "https://example.com/sds.pdf"
+
+    @pytest.mark.asyncio
     async def test_get_product_not_found(self, setup_services):
         setup_services["svc"].get_product.return_value = None
         from routes.knowledge_base import get_product
