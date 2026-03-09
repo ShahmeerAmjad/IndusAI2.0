@@ -13,6 +13,7 @@ import {
   Bot,
   Bug,
   Upload,
+  Database,
   ChevronsLeft,
   ChevronsRight,
   Inbox,
@@ -20,6 +21,7 @@ import {
   Users,
   FileText,
   Settings,
+  Share2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -55,6 +57,7 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       label: "Products",
       items: [
         { to: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
+        { to: "/graph", label: "Graph Explorer", icon: Share2 },
         { to: "/products", label: "Product Catalog", icon: Package },
       ],
     },
@@ -69,11 +72,18 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       ],
     },
     {
-      label: "Settings",
+      label: "Tools",
       items: [
         { to: "/chat", label: "AI Assistant", icon: Bot },
+        { to: "/ingestion", label: "Ingestion", icon: Database },
         { to: "/bulk-import", label: "Bulk Import", icon: Upload },
         { to: "/admin", label: "Admin Debug", icon: Bug },
+      ],
+    },
+    {
+      label: "System",
+      items: [
+        { to: "/settings", label: "Settings", icon: Settings },
       ],
     },
   ];

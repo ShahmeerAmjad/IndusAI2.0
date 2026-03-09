@@ -24,6 +24,9 @@ const BulkImport = lazy(() => import("@/pages/BulkImport"));
 const InboxPage = lazy(() => import("@/pages/Inbox"));
 const MessageDetail = lazy(() => import("@/pages/MessageDetail"));
 const KnowledgeBase = lazy(() => import("@/pages/KnowledgeBase"));
+const Settings = lazy(() => import("@/pages/Settings"));
+const Ingestion = lazy(() => import("@/pages/Ingestion"));
+const GraphFullScreen = lazy(() => import("@/pages/GraphFullScreen"));
 
 function PageLoader() {
   return (
@@ -75,6 +78,7 @@ export default function App() {
 
           {/* Protected app routes */}
           <Route element={<RequireAuth />}>
+            <Route path="/graph" element={<Suspense fallback={<FullPageLoader />}><GraphFullScreen /></Suspense>} />
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
               <Route path="/inbox" element={<Suspense fallback={<PageLoader />}><InboxPage /></Suspense>} />
@@ -93,6 +97,8 @@ export default function App() {
               <Route path="/chat" element={<Suspense fallback={<PageLoader />}><Chat /></Suspense>} />
               <Route path="/bulk-import" element={<Suspense fallback={<PageLoader />}><BulkImport /></Suspense>} />
               <Route path="/admin" element={<Suspense fallback={<PageLoader />}><AdminDebug /></Suspense>} />
+              <Route path="/ingestion" element={<Suspense fallback={<PageLoader />}><Ingestion /></Suspense>} />
+              <Route path="/settings" element={<Suspense fallback={<PageLoader />}><Settings /></Suspense>} />
             </Route>
           </Route>
 
