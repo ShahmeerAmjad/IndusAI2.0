@@ -1,10 +1,12 @@
-import { FileText, Shield, Download } from "lucide-react";
+import { FileText, Shield, Download, ExternalLink } from "lucide-react";
 
 interface TDSSDSViewerProps {
   tds?: Record<string, string | number | null>;
   sds?: Record<string, string | number | string[] | null>;
   tdsUrl?: string;
   sdsUrl?: string;
+  tdsSourceUrl?: string;
+  sdsSourceUrl?: string;
 }
 
 const TDS_FIELDS = [
@@ -36,7 +38,7 @@ function renderValue(val: unknown): string {
   return String(val);
 }
 
-export default function TDSSDSViewer({ tds, sds, tdsUrl, sdsUrl }: TDSSDSViewerProps) {
+export default function TDSSDSViewer({ tds, sds, tdsUrl, sdsUrl, tdsSourceUrl, sdsSourceUrl }: TDSSDSViewerProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {/* TDS card */}
@@ -46,12 +48,20 @@ export default function TDSSDSViewer({ tds, sds, tdsUrl, sdsUrl }: TDSSDSViewerP
             <FileText size={16} className="text-blue-600" />
             <h4 className="text-sm font-semibold text-neutral-700">Technical Data Sheet</h4>
           </div>
-          {tdsUrl && (
-            <a href={tdsUrl} target="_blank" rel="noreferrer"
-               className="flex items-center gap-1 text-xs text-industrial-600 hover:underline">
-              <Download size={12} /> PDF
-            </a>
-          )}
+          <div className="flex items-center gap-1.5">
+            {tdsUrl && (
+              <a href={tdsUrl} target="_blank" rel="noreferrer"
+                 className="flex items-center gap-1 text-xs text-industrial-600 hover:underline">
+                <Download size={12} /> Download
+              </a>
+            )}
+            {tdsSourceUrl && (
+              <a href={tdsSourceUrl} target="_blank" rel="noreferrer"
+                 className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                <ExternalLink size={12} /> Chempoint
+              </a>
+            )}
+          </div>
         </div>
         <div className="p-4">
           {tds && Object.keys(tds).length > 0 ? (
@@ -78,12 +88,20 @@ export default function TDSSDSViewer({ tds, sds, tdsUrl, sdsUrl }: TDSSDSViewerP
             <Shield size={16} className="text-red-600" />
             <h4 className="text-sm font-semibold text-neutral-700">Safety Data Sheet</h4>
           </div>
-          {sdsUrl && (
-            <a href={sdsUrl} target="_blank" rel="noreferrer"
-               className="flex items-center gap-1 text-xs text-industrial-600 hover:underline">
-              <Download size={12} /> PDF
-            </a>
-          )}
+          <div className="flex items-center gap-1.5">
+            {sdsUrl && (
+              <a href={sdsUrl} target="_blank" rel="noreferrer"
+                 className="flex items-center gap-1 text-xs text-industrial-600 hover:underline">
+                <Download size={12} /> Download
+              </a>
+            )}
+            {sdsSourceUrl && (
+              <a href={sdsSourceUrl} target="_blank" rel="noreferrer"
+                 className="flex items-center gap-1 text-xs text-red-600 hover:underline">
+                <ExternalLink size={12} /> Chempoint
+              </a>
+            )}
+          </div>
         </div>
         <div className="p-4">
           {sds && Object.keys(sds).length > 0 ? (

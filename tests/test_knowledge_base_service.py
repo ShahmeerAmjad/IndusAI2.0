@@ -260,6 +260,63 @@ async def test_list_products_with_manufacturer_filter():
     result = await svc.list_products(page=1, page_size=25, manufacturer="Dow")
     assert result["total"] == 1
     assert result["items"][0]["manufacturer"] == "Dow"
+    # Verify the Cypher uses required MATCH (not WHERE after OPTIONAL MATCH)
+    count_query = graph.execute_read.call_args_list[0][0][0]
+    assert "MATCH (p)-[:MANUFACTURED_BY]->(:Manufacturer {name: $manufacturer})" in count_query
+
+
+@pytest.mark.asyncio
+async def test_list_products_manufacturer_filter_uses_required_match():
+    """Manufacturer filter should use required MATCH so industries aren't corrupted."""
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = AsyncMock()
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"total": 1}],
+        [{"product": {"sku": "X-1", "name": "Epoxy A"}, "manufacturer": "Dow",
+          "industries": ["Adhesives", "Coatings", "Plastics"], "has_tds": True, "has_sds": False}],
+    ])
+    svc = KnowledgeBaseService(None, graph)
+    result = await svc.list_products(manufacturer="Dow")
+    # All industries should be preserved, not just the filtered one
+    assert result["items"][0]["industries"] == ["Adhesives", "Coatings", "Plastics"]
+
+
+@pytest.mark.asyncio
+async def test_list_products_industry_filter_uses_required_match():
+    """Industry filter should use required MATCH so all industries for matching products are shown."""
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = AsyncMock()
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"total": 1}],
+        [{"product": {"sku": "X-1", "name": "Epoxy A"}, "manufacturer": "Dow",
+          "industries": ["Adhesives", "Coatings"], "has_tds": False, "has_sds": False}],
+    ])
+    svc = KnowledgeBaseService(None, graph)
+    result = await svc.list_products(industry="Adhesives")
+    # Verify required MATCH for industry
+    count_query = graph.execute_read.call_args_list[0][0][0]
+    assert "MATCH (p)-[:SERVES_INDUSTRY]->(:Industry {name: $industry})" in count_query
+
+
+@pytest.mark.asyncio
+async def test_list_products_search_covers_description_and_manufacturer():
+    """Search should cover name, SKU, CAS, description, AND manufacturer name."""
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = AsyncMock()
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"total": 1}],
+        [{"product": {"sku": "X-1", "name": "Epoxy A"}, "manufacturer": "Dow",
+          "industries": [], "has_tds": False, "has_sds": False}],
+    ])
+    svc = KnowledgeBaseService(None, graph)
+    result = await svc.list_products(search="water-soluble")
+    data_query = graph.execute_read.call_args_list[1][0][0]
+    # Should search across description and manufacturer name
+    assert "p.description" in data_query
+    assert "mfr.name" in data_query
 
 
 @pytest.mark.asyncio

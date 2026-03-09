@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { X, FileText, Shield, Download, ChevronDown, ChevronRight } from "lucide-react";
+import { X, FileText, Shield, Download, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -214,12 +214,20 @@ export default function ProductDrawer({ sku, onClose }: ProductDrawerProps) {
                     <FileText size={16} className="text-blue-600" />
                     <h3 className="font-semibold text-neutral-800">Technical Data Sheet</h3>
                   </div>
-                  {extraction.tds?.pdf_url && (
-                    <a href={extraction.tds.pdf_url} target="_blank" rel="noreferrer"
-                      className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md hover:bg-blue-100">
-                      <Download size={12} /> Open PDF
-                    </a>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {extraction.tds?.pdf_url && (
+                      <a href={extraction.tds.pdf_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md hover:bg-blue-100">
+                        <Download size={12} /> Download
+                      </a>
+                    )}
+                    {extraction.tds?.source_url && (
+                      <a href={extraction.tds.source_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1 text-xs bg-neutral-50 text-neutral-600 px-2.5 py-1 rounded-md hover:bg-neutral-100">
+                        <ExternalLink size={12} /> Chempoint
+                      </a>
+                    )}
+                  </div>
                 </div>
                 {extraction.tds?.revision_date && (
                   <p className="text-xs text-neutral-400 mb-2">Revision: {extraction.tds.revision_date}</p>
@@ -244,12 +252,20 @@ export default function ProductDrawer({ sku, onClose }: ProductDrawerProps) {
                     <Shield size={16} className="text-red-600" />
                     <h3 className="font-semibold text-neutral-800">Safety Data Sheet</h3>
                   </div>
-                  {extraction.sds?.pdf_url && (
-                    <a href={extraction.sds.pdf_url} target="_blank" rel="noreferrer"
-                      className="flex items-center gap-1 text-xs bg-red-50 text-red-700 px-2.5 py-1 rounded-md hover:bg-red-100">
-                      <Download size={12} /> Open PDF
-                    </a>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {extraction.sds?.pdf_url && (
+                      <a href={extraction.sds.pdf_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1 text-xs bg-red-50 text-red-700 px-2.5 py-1 rounded-md hover:bg-red-100">
+                        <Download size={12} /> Download
+                      </a>
+                    )}
+                    {extraction.sds?.source_url && (
+                      <a href={extraction.sds.source_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1 text-xs bg-neutral-50 text-neutral-600 px-2.5 py-1 rounded-md hover:bg-neutral-100">
+                        <ExternalLink size={12} /> Chempoint
+                      </a>
+                    )}
+                  </div>
                 </div>
                 {extraction.sds?.revision_date && (
                   <p className="text-xs text-neutral-400 mb-2">Revision: {extraction.sds.revision_date}</p>

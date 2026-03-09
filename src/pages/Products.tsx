@@ -1,24 +1,43 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, CatalogProduct } from "@/lib/api";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   Search, ChevronDown, ChevronRight, Check, Minus,
-  FileText, Shield, Download, ExternalLink,
+  FileText, Shield, Download, ExternalLink, X,
 } from "lucide-react";
 import ProductDrawer from "@/components/products/ProductDrawer";
 
 type DocFilter = "all" | "has_tds" | "has_sds" | "missing_tds" | "missing_sds";
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 export default function Products() {
   const [search, setSearch] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [page, setPage] = useState(1);
   const [manufacturer, setManufacturer] = useState("");
   const [industry, setIndustry] = useState("");
   const [docFilter, setDocFilter] = useState<DocFilter>("all");
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
   const [drawerSku, setDrawerSku] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Reset to page 1 when search changes
+  const prevSearch = useRef(debouncedSearch);
+  useEffect(() => {
+    if (prevSearch.current !== debouncedSearch) {
+      setPage(1);
+      prevSearch.current = debouncedSearch;
+    }
+  }, [debouncedSearch]);
 
   // Derive has_tds / has_sds from docFilter
   const filterParams = useMemo(() => {
@@ -31,10 +50,10 @@ export default function Products() {
   }, [docFilter]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["catalog-products", page, appliedSearch, manufacturer, industry, docFilter],
+    queryKey: ["catalog-products", page, debouncedSearch, manufacturer, industry, docFilter],
     queryFn: () =>
       api.getCatalogProducts({
-        page, pageSize: 25, search: appliedSearch || undefined,
+        page, pageSize: 25, search: debouncedSearch || undefined,
         manufacturer: manufacturer || undefined,
         industry: industry || undefined,
         ...filterParams,
@@ -46,11 +65,7 @@ export default function Products() {
     queryFn: () => api.getCatalogFilters(),
   });
 
-  const handleSearch = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    setAppliedSearch(search);
-    setPage(1);
-  }, [search]);
+  const hasActiveFilters = !!debouncedSearch || !!manufacturer || !!industry || docFilter !== "all";
 
   const products = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -68,21 +83,23 @@ export default function Products() {
 
       {/* Search + Filters */}
       <div className="flex flex-wrap gap-3">
-        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-[300px]">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-            <input
-              type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, SKU, or CAS number..."
-              className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-lg text-sm
-                         focus:outline-none focus:ring-2 focus:ring-industrial-600 bg-white"
-            />
-          </div>
-          <button type="submit"
-            className="px-4 py-2 bg-industrial-800 text-white text-sm font-medium rounded-lg hover:bg-industrial-900">
-            Search
-          </button>
-        </form>
+        <div className="relative flex-1 min-w-[300px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+          <input
+            ref={searchRef}
+            type="text" value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, SKU, manufacturer, description..."
+            className="w-full pl-10 pr-9 py-2 border border-neutral-300 rounded-lg text-sm
+                       focus:outline-none focus:ring-2 focus:ring-industrial-600 bg-white"
+          />
+          {search && (
+            <button onClick={() => { setSearch(""); searchRef.current?.focus(); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
+              <X size={14} />
+            </button>
+          )}
+        </div>
 
         <select value={manufacturer} onChange={(e) => { setManufacturer(e.target.value); setPage(1); }}
           className="px-3 py-2 border border-neutral-300 rounded-lg text-sm bg-white min-w-[160px]">
@@ -109,8 +126,8 @@ export default function Products() {
           <option value="missing_sds">Missing SDS</option>
         </select>
 
-        {(appliedSearch || manufacturer || industry || docFilter !== "all") && (
-          <button onClick={() => { setSearch(""); setAppliedSearch(""); setManufacturer(""); setIndustry(""); setDocFilter("all"); setPage(1); }}
+        {hasActiveFilters && (
+          <button onClick={() => { setSearch(""); setManufacturer(""); setIndustry(""); setDocFilter("all"); setPage(1); }}
             className="px-3 py-2 border border-neutral-300 text-neutral-600 text-sm rounded-lg hover:bg-neutral-50">
             Clear All
           </button>
@@ -269,12 +286,20 @@ function ExpandedProductDetail({ sku, onViewDetails }: { sku: string; onViewDeta
               <FileText size={14} className="text-blue-600" />
               <span className="text-sm font-semibold text-neutral-700">TDS Fields</span>
             </div>
-            {data.tds?.pdf_url && (
-              <a href={data.tds.pdf_url} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-xs text-industrial-600 hover:underline">
-                <Download size={12} /> PDF
-              </a>
-            )}
+            <div className="flex items-center gap-1.5">
+              {data.tds?.pdf_url && (
+                <a href={data.tds.pdf_url} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1 text-xs text-industrial-600 hover:underline">
+                  <Download size={12} /> Download
+                </a>
+              )}
+              {data.tds?.source_url && (
+                <a href={data.tds.source_url} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                  <ExternalLink size={12} /> Chempoint
+                </a>
+              )}
+            </div>
           </div>
           <div className="p-3">
             {Object.keys(tdsFields).length > 0 ? (
@@ -305,12 +330,20 @@ function ExpandedProductDetail({ sku, onViewDetails }: { sku: string; onViewDeta
               <Shield size={14} className="text-red-600" />
               <span className="text-sm font-semibold text-neutral-700">SDS Fields</span>
             </div>
-            {data.sds?.pdf_url && (
-              <a href={data.sds.pdf_url} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-xs text-industrial-600 hover:underline">
-                <Download size={12} /> PDF
-              </a>
-            )}
+            <div className="flex items-center gap-1.5">
+              {data.sds?.pdf_url && (
+                <a href={data.sds.pdf_url} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1 text-xs text-industrial-600 hover:underline">
+                  <Download size={12} /> Download
+                </a>
+              )}
+              {data.sds?.source_url && (
+                <a href={data.sds.source_url} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1 text-xs text-red-600 hover:underline">
+                  <ExternalLink size={12} /> Chempoint
+                </a>
+              )}
+            </div>
           </div>
           <div className="p-3">
             {Object.keys(sdsFields).length > 0 ? (

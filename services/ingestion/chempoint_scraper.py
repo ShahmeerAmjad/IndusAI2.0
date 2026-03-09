@@ -7,6 +7,7 @@ product data (name, manufacturer, CAS#, industries, TDS/SDS links).
 import json
 import logging
 import re
+from html import unescape
 
 import httpx
 
@@ -42,6 +43,17 @@ Page content:
 {content}"""
 
 
+def _clean_name(raw: str) -> str:
+    """Strip HTML tags and decode entities from a product name.
+
+    Firecrawl markdown can contain remnants like `<sup>&reg;</sup>` or
+    `&amp;` — clean those so the product name is plain text.
+    """
+    cleaned = re.sub(r'<[^>]+>', '', raw)   # strip HTML tags
+    cleaned = unescape(cleaned)              # decode &reg; &amp; etc.
+    return cleaned.strip()
+
+
 class ChempointScraper:
     """Scrape Chempoint catalog pages and extract structured product data."""
 
@@ -68,12 +80,14 @@ class ChempointScraper:
         # Pattern: ## [Product Name](https://www.chempoint.com/products/...)
         products = []
         seen_urls = set()
+        seen_names = set()
         for match in re.finditer(
             r'## \[([^\]]+)\]\((https://www\.chempoint\.com/products/[^)]+)\)', html
         ):
-            name, product_url = match.group(1), match.group(2)
-            if product_url not in seen_urls:
+            name, product_url = _clean_name(match.group(1)), match.group(2)
+            if product_url not in seen_urls and name not in seen_names:
                 seen_urls.add(product_url)
+                seen_names.add(name)
                 products.append({"name": name, "url": product_url})
 
         if products:
@@ -90,22 +104,45 @@ class ChempointScraper:
         Works for manufacturer product listings (/products/manufacturer-name)
         and product line listings (/products/mfg/line-name).
         Only returns URLs with 4+ path segments (actual product detail pages).
+        Stops before "Related" / "You May Also Like" sections to avoid
+        pulling in products from other manufacturers.
         """
         html = await self._fetch_page(url)
 
+        # Truncate at "Related Products" / "You May Also Like" sections
+        for marker in ("## Related", "## You May Also Like", "## Recommended",
+                       "### Related", "### You May Also Like"):
+            idx = html.find(marker)
+            if idx != -1:
+                logger.info("Truncating listing page at '%s' (pos %d)", marker, idx)
+                html = html[:idx]
+
+        # Extract the manufacturer slug from the listing URL so we can
+        # reject product URLs that belong to a different manufacturer.
+        listing_manufacturer = ""
+        listing_segments = url.replace("https://www.chempoint.com/products/", "").strip("/").split("/")
+        if listing_segments:
+            listing_manufacturer = listing_segments[0].lower()
+
         products = []
         seen_urls = set()
+        seen_names = set()
         for match in re.finditer(
             r'\[([^\]]+)\]\((https://www\.chempoint\.com/products/[^)]+)\)', html
         ):
-            name, product_url = match.group(1), match.group(2)
+            name, product_url = _clean_name(match.group(1)), match.group(2)
             if name in ("View Details", "SDS", "TDS", "View All Manufacturer Products"):
                 continue
-            if product_url in seen_urls:
+            if product_url in seen_urls or name in seen_names:
                 continue
             segments = product_url.replace("https://www.chempoint.com/products/", "").strip("/").split("/")
             if len(segments) >= 4:
+                # Reject products from a different manufacturer
+                if listing_manufacturer and segments[0].lower() != listing_manufacturer:
+                    logger.debug("Skipping cross-manufacturer product: %s", product_url)
+                    continue
                 seen_urls.add(product_url)
+                seen_names.add(name)
                 products.append({"name": name, "url": product_url})
 
         if products:
@@ -136,22 +173,41 @@ class ChempointScraper:
             logger.info("Following 'View All Manufacturer Products' → %s", all_products_url)
             html = await self._fetch_page(all_products_url)
 
+        # Truncate at "Related Products" / "You May Also Like" sections
+        for marker in ("## Related", "## You May Also Like", "## Recommended",
+                       "### Related", "### You May Also Like"):
+            idx = html.find(marker)
+            if idx != -1:
+                logger.info("Truncating manufacturer page at '%s' (pos %d)", marker, idx)
+                html = html[:idx]
+
+        # Extract manufacturer slug from URL for cross-manufacturer filtering
+        mfg_slug = ""
+        if "/manufacturers/" in url:
+            mfg_slug = url.split("/manufacturers/")[-1].strip("/").split("/")[0].lower()
+
         # Extract product detail URLs (4+ path segments = actual products)
         products = []
         seen_urls = set()
+        seen_names = set()
         for match in re.finditer(
             r'\[([^\]]+)\]\((https://www\.chempoint\.com/products/[^)]+)\)', html
         ):
-            name, product_url = match.group(1), match.group(2)
+            name, product_url = _clean_name(match.group(1)), match.group(2)
             # Skip generic labels and duplicate URLs
             if name in ("View Details", "SDS", "TDS", "View All Manufacturer Products"):
                 continue
-            if product_url in seen_urls:
+            if product_url in seen_urls or name in seen_names:
                 continue
             # Only include URLs with 4+ segments (manufacturer/line/subline/product)
             segments = product_url.replace("https://www.chempoint.com/products/", "").strip("/").split("/")
             if len(segments) >= 4:
+                # Reject cross-manufacturer products (from "Related" sections we missed)
+                if mfg_slug and segments[0].lower() != mfg_slug:
+                    logger.debug("Skipping cross-manufacturer product: %s", product_url)
+                    continue
                 seen_urls.add(product_url)
+                seen_names.add(name)
                 products.append({"name": name, "url": product_url})
 
         if products:
@@ -244,7 +300,11 @@ class ChempointScraper:
             )
             json_match = re.search(r'\[[\s\S]*\]', response)
             if json_match:
-                return json.loads(json_match.group())
+                products = json.loads(json_match.group())
+                for p in products:
+                    if "name" in p:
+                        p["name"] = _clean_name(p["name"])
+                return products
         except Exception as e:
             logger.warning("LLM extraction failed: %s", e)
 

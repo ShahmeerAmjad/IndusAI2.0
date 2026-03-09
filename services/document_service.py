@@ -116,23 +116,30 @@ class DocumentService:
 
     async def store_document(self, product_id: str, doc_type: str,
                              file_bytes: bytes, file_name: str,
-                             source_url: str | None = None) -> dict:
-        """Save document file to disk and insert metadata into documents table."""
+                             source_url: str | None = None,
+                             content_format: str = "pdf") -> dict:
+        """Save document file to disk and insert metadata into documents table.
+
+        Args:
+            content_format: 'pdf' for real PDF binary, 'markdown' for Firecrawl text fallback.
+        """
         doc_dir = DATA_DIR / str(product_id)
         doc_dir.mkdir(parents=True, exist_ok=True)
-        file_path = str(doc_dir / f"{doc_type}_{file_name}")
+        # Use appropriate extension based on content format
+        ext = ".md" if content_format == "markdown" else ""
+        file_path = str(doc_dir / f"{doc_type}_{file_name}{ext}")
         with open(file_path, "wb") as f:
             f.write(file_bytes)
 
         async with self._db.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """INSERT INTO documents (product_id, doc_type, file_path, file_name,
-                   file_size_bytes, source_url)
-                   VALUES ($1, $2, $3, $4, $5, $6)
+                   file_size_bytes, source_url, content_format)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7)
                    RETURNING id, product_id, doc_type, file_path, file_name,
-                   file_size_bytes, is_current, created_at""",
+                   file_size_bytes, content_format, is_current, created_at""",
                 product_id, doc_type, file_path, file_name,
-                len(file_bytes), source_url,
+                len(file_bytes), source_url, content_format,
             )
         return dict(row)
 
@@ -156,7 +163,7 @@ class DocumentService:
         """Return current TDS/SDS documents for a product."""
         async with self._db.pool.acquire() as conn:
             rows = await conn.fetch(
-                """SELECT id, doc_type, file_name, file_path, is_current, created_at
+                """SELECT id, doc_type, file_name, file_path, content_format, source_url, is_current, created_at
                    FROM documents
                    WHERE product_id = $1 AND is_current = TRUE
                    ORDER BY doc_type""",

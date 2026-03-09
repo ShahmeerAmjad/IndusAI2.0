@@ -381,6 +381,8 @@ export interface DocumentMeta {
   doc_type: string;
   file_name: string;
   file_path?: string;
+  content_format?: string;
+  source_url?: string;
   is_current?: boolean;
   created_at?: string;
 }

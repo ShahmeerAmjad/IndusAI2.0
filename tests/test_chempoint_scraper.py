@@ -233,6 +233,71 @@ async def test_scrape_manufacturer_page_falls_back_to_llm():
 
 
 @pytest.mark.asyncio
+async def test_clean_name_strips_html_tags():
+    """Product names should have HTML tags stripped and entities decoded."""
+    from services.ingestion.chempoint_scraper import _clean_name
+    assert _clean_name('ERYSTA<sup>&reg;</sup> C40') == 'ERYSTA\u00ae C40'
+    assert _clean_name('Test &amp; Product') == 'Test & Product'
+    assert _clean_name('Plain Name') == 'Plain Name'
+
+
+@pytest.mark.asyncio
+async def test_scrape_product_listing_skips_related_products():
+    """Products after '## Related' section should be excluded."""
+    from services.ingestion.chempoint_scraper import ChempointScraper
+    scraper = ChempointScraper(firecrawl_api_key="test-key")
+
+    listing_page = """
+    [Product A](https://www.chempoint.com/products/ingredion/ingredion-starches/dent-corn/product-a)
+    [Product B](https://www.chempoint.com/products/ingredion/ingredion-starches/dent-corn/product-b)
+    ## Related Products
+    [Other Mfg Product](https://www.chempoint.com/products/dow/dow-plastics/polyethylene/dow-pe-100)
+    """
+
+    with patch.object(scraper, '_fetch_page', new_callable=AsyncMock) as mock_fetch:
+        mock_fetch.return_value = listing_page
+        products = await scraper.scrape_product_listing("https://www.chempoint.com/products/ingredion")
+
+    assert len(products) == 2
+    assert products[0]["name"] == "Product A"
+    assert products[1]["name"] == "Product B"
+
+
+@pytest.mark.asyncio
+async def test_scrape_product_listing_skips_cross_manufacturer():
+    """Products from a different manufacturer slug should be filtered out."""
+    from services.ingestion.chempoint_scraper import ChempointScraper
+    scraper = ChempointScraper(firecrawl_api_key="test-key")
+
+    listing_page = """
+    [Product A](https://www.chempoint.com/products/ingredion/ingredion-starches/dent-corn/product-a)
+    [Dow Product](https://www.chempoint.com/products/dow/dow-plastics/polyethylene/dow-pe-100)
+    """
+
+    with patch.object(scraper, '_fetch_page', new_callable=AsyncMock) as mock_fetch:
+        mock_fetch.return_value = listing_page
+        products = await scraper.scrape_product_listing("https://www.chempoint.com/products/ingredion")
+
+    assert len(products) == 1
+    assert products[0]["name"] == "Product A"
+
+
+@pytest.mark.asyncio
+async def test_llm_extraction_cleans_html_names():
+    """LLM-extracted product names should have HTML stripped."""
+    from services.ingestion.chempoint_scraper import ChempointScraper, PRODUCT_EXTRACTION_PROMPT
+    import json
+    llm = MagicMock()
+    llm.chat = AsyncMock(return_value=json.dumps([
+        {"name": "ERYSTA<sup>&reg;</sup> C40", "manufacturer": "Ingredion"},
+    ]))
+    scraper = ChempointScraper(firecrawl_api_key="test-key", llm_router=llm)
+
+    result = await scraper._extract_with_llm("some content", PRODUCT_EXTRACTION_PROMPT)
+    assert result[0]["name"] == "ERYSTA\u00ae C40"
+
+
+@pytest.mark.asyncio
 async def test_download_document_404():
     """httpx.HTTPStatusError propagates from _download_file."""
     import httpx

@@ -600,6 +600,7 @@ CREATE TABLE IF NOT EXISTS documents (
     extracted_text TEXT,
     structured_data JSONB,
     source_url TEXT,
+    content_format VARCHAR(10) DEFAULT 'pdf',
     revision_date DATE,
     is_current BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -743,6 +744,7 @@ CREATE TABLE IF NOT EXISTS documents (
     extracted_text TEXT,
     structured_data JSONB,
     source_url TEXT,
+    content_format VARCHAR(10) DEFAULT 'pdf',
     revision_date DATE,
     is_current BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT now()
@@ -873,6 +875,10 @@ ALTER TABLE inbound_messages
     ADD COLUMN IF NOT EXISTS body_encrypted BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS pii_redacted BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS size_bytes INTEGER;
+
+-- Track whether stored document is real PDF or Firecrawl markdown fallback
+ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS content_format VARCHAR(10) DEFAULT 'pdf';
 """
 
 EMAIL_INDEXES = """

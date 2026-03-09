@@ -240,12 +240,16 @@ class ChempointSeedPipeline:
             _emit({"stage": "downloading_pdf", "product": sku,
                    "detail": f"{doc_type} from {doc_url}"})
             file_bytes = await self._scraper.download_document(doc_url)
-            file_name = doc_url.split("/")[-1] or f"{doc_type.lower()}.pdf"
+            file_name = f"{sku}_{doc_type}.pdf"
+
+            # Detect whether we got a real PDF or Firecrawl markdown fallback
+            content_format = "pdf" if file_bytes[:5] == b"%PDF-" else "markdown"
 
             await self._doc.store_document(
                 product_id=product_id, doc_type=doc_type,
                 file_bytes=file_bytes, file_name=file_name,
                 source_url=doc_url,
+                content_format=content_format,
             )
 
             _emit({"stage": "extracting", "product": sku,

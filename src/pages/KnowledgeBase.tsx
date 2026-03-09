@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, BookOpen, FileText, Shield, ChevronDown, ChevronUp, Network, Download } from "lucide-react";
+import { Search, BookOpen, FileText, Shield, ChevronDown, ChevronUp, Network, Download, ExternalLink } from "lucide-react";
 import { api, type GraphPart, type DocumentMeta } from "@/lib/api";
 import TDSSDSViewer from "@/components/products/TDSSDSViewer";
 import IngestionPanel from "@/components/ingestion/IngestionPanel";
@@ -193,14 +193,29 @@ function ProductCard({ part }: { part: GraphPart }) {
               <h4 className="mb-2 text-xs font-semibold uppercase text-neutral-400">Documents</h4>
               <div className="flex flex-wrap gap-2">
                 {docs.map((d) => (
-                  <a
-                    key={d.id}
-                    href={`/api/v1/documents/${d.id}/download`}
-                    className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium text-industrial-600 hover:bg-industrial-50"
-                  >
-                    {d.doc_type === "TDS" ? <FileText size={12} /> : <Shield size={12} />}
-                    {d.file_name}
-                  </a>
+                  <div key={d.id} className="flex items-center gap-1.5">
+                    <a
+                      href={`/api/v1/documents/${d.id}/download`}
+                      className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium text-industrial-600 hover:bg-industrial-50"
+                    >
+                      {d.doc_type === "TDS" ? <FileText size={12} /> : <Shield size={12} />}
+                      {d.content_format === "markdown" ? "View Text" : "Download PDF"}
+                    </a>
+                    {d.source_url && (
+                      <a
+                        href={d.source_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:opacity-80 ${
+                          d.doc_type === "TDS"
+                            ? "border-blue-200 text-blue-600"
+                            : "border-red-200 text-red-600"
+                        }`}
+                      >
+                        <ExternalLink size={12} /> Chempoint
+                      </a>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

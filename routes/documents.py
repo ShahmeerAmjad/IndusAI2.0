@@ -74,7 +74,6 @@ async def download_document(doc_id: str):
     """Download a document file by its ID."""
     svc = _require_service()
 
-    # Look up file path from DB
     doc = await svc.get_document_by_id(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -83,11 +82,29 @@ async def download_document(doc_id: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
+    content_format = doc.get("content_format", "pdf")
+    if content_format == "markdown":
+        media_type = "text/markdown"
+        filename = doc.get("file_name", file_path.name).rsplit(".", 1)[0] + ".md"
+    else:
+        media_type = "application/pdf"
+        filename = doc.get("file_name", file_path.name)
+
     return FileResponse(
         path=str(file_path),
-        filename=doc.get("file_name", file_path.name),
-        media_type="application/pdf",
+        filename=filename,
+        media_type=media_type,
     )
+
+
+@router.get("/{doc_id}/info")
+async def get_document_info(doc_id: str):
+    """Get document metadata including content format (pdf vs markdown)."""
+    svc = _require_service()
+    doc = await svc.get_document_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
 
 
 @router.get("/search")

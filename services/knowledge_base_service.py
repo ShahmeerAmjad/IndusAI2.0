@@ -206,27 +206,43 @@ class KnowledgeBaseService:
                             industry: str | None = None,
                             has_tds: bool | None = None,
                             has_sds: bool | None = None) -> dict:
-        """List Part nodes with optional search, manufacturer, industry, and doc filters."""
+        """List Part nodes with optional search, manufacturer, industry, and doc filters.
+
+        Uses required MATCHes for filters (manufacturer, industry) so that the
+        OPTIONAL MATCHes used for display data (all industries, TDS/SDS counts)
+        aren't corrupted by WHERE clauses.
+        """
         skip = (page - 1) * page_size
         params: dict = {"skip": skip, "limit": page_size}
 
-        # Build WHERE conditions
-        conditions = []
-        if search:
-            conditions.append(
-                "(toLower(p.name) CONTAINS toLower($search)"
-                " OR toLower(p.sku) CONTAINS toLower($search)"
-                " OR toLower(p.cas_number) CONTAINS toLower($search))"
-            )
-            params["search"] = search
+        # Required matches for filters — these narrow the result set BEFORE
+        # we collect display data with OPTIONAL MATCH.
+        required_matches = ["MATCH (p:Part)"]
+        search_conditions = []
+
         if manufacturer:
-            conditions.append("m.name = $manufacturer")
+            required_matches.append(
+                "MATCH (p)-[:MANUFACTURED_BY]->(:Manufacturer {name: $manufacturer})"
+            )
             params["manufacturer"] = manufacturer
+
         if industry:
-            conditions.append("i.name = $industry")
+            required_matches.append(
+                "MATCH (p)-[:SERVES_INDUSTRY]->(:Industry {name: $industry})"
+            )
             params["industry"] = industry
 
-        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        if search:
+            # Search across name, SKU, CAS, description, and manufacturer
+            search_conditions.append(
+                "(toLower(p.name) CONTAINS toLower($search)"
+                " OR toLower(p.sku) CONTAINS toLower($search)"
+                " OR toLower(coalesce(p.cas_number, '')) CONTAINS toLower($search)"
+                " OR toLower(coalesce(p.description, '')) CONTAINS toLower($search))"
+            )
+            params["search"] = search
+
+        search_where = f"WHERE {' AND '.join(search_conditions)}" if search_conditions else ""
 
         # Optional TDS/SDS existence filters applied after aggregation
         having = []
@@ -240,15 +256,25 @@ class KnowledgeBaseService:
             having.append("has_sds = false")
         having_clause = f"WHERE {' AND '.join(having)}" if having else ""
 
+        # Also search manufacturer name if search is provided
+        mfr_search = ""
+        if search:
+            mfr_search = "OR toLower(coalesce(mfr.name, '')) CONTAINS toLower($search)"
+            # Expand search_where to include manufacturer name
+            search_where = (
+                f"WHERE ({search_conditions[0]} {mfr_search})"
+                if search_conditions else ""
+            )
+
         base = f"""
-        MATCH (p:Part)
-        OPTIONAL MATCH (p)-[:MANUFACTURED_BY]->(m:Manufacturer)
-        OPTIONAL MATCH (p)-[:SERVES_INDUSTRY]->(i:Industry)
+        {chr(10).join(required_matches)}
+        OPTIONAL MATCH (p)-[:MANUFACTURED_BY]->(mfr:Manufacturer)
+        OPTIONAL MATCH (p)-[:SERVES_INDUSTRY]->(ind:Industry)
         OPTIONAL MATCH (p)-[:HAS_TDS]->(t:TechnicalDataSheet)
         OPTIONAL MATCH (p)-[:HAS_SDS]->(s:SafetyDataSheet)
-        {where}
-        WITH p, m.name AS manufacturer,
-             collect(DISTINCT i.name) AS industries,
+        {search_where}
+        WITH p, mfr.name AS manufacturer,
+             collect(DISTINCT ind.name) AS industries,
              count(DISTINCT t) > 0 AS has_tds,
              count(DISTINCT s) > 0 AS has_sds
         {having_clause}
@@ -334,7 +360,7 @@ class KnowledgeBaseService:
                         product_uuid = product_row["id"]
                         doc_rows = await conn.fetch(
                             """SELECT id, doc_type, file_name, file_size_bytes,
-                                      is_current, created_at, source_url
+                                      is_current, created_at, source_url, content_format
                                FROM documents
                                WHERE product_id = $1
                                ORDER BY doc_type, created_at DESC""",
