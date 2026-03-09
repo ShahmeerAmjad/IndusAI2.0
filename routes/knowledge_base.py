@@ -63,11 +63,33 @@ async def list_products(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     search: Optional[str] = Query(None),
+    manufacturer: Optional[str] = Query(None),
+    industry: Optional[str] = Query(None),
+    has_tds: Optional[bool] = Query(None),
+    has_sds: Optional[bool] = Query(None),
 ):
-    """Paginated product list from the knowledge graph."""
+    """Paginated product list from the knowledge graph with filters."""
     svc = _get_svc()
-    result = await svc.list_products(page=page, page_size=page_size, search=search)
+    result = await svc.list_products(
+        page=page, page_size=page_size, search=search,
+        manufacturer=manufacturer, industry=industry,
+        has_tds=has_tds, has_sds=has_sds,
+    )
     return result
+
+
+@router.get("/filters")
+async def get_filters():
+    """Return available manufacturers and industries for filter dropdowns."""
+    svc = _get_svc()
+    return await svc.get_filters()
+
+
+@router.get("/products/{product_id}/extraction")
+async def get_product_extraction(product_id: str):
+    """Return full TDS + SDS extracted fields with confidence scores."""
+    svc = _get_svc()
+    return await svc.get_product_extraction(product_id)
 
 
 @router.get("/products/{product_id}")

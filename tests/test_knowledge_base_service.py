@@ -183,8 +183,10 @@ async def test_list_products_basic():
     graph = AsyncMock()
     graph.execute_read = AsyncMock(side_effect=[
         [{"total": 2}],  # count query
-        [{"p": {"name": "Product A", "sku": "CP-AAA"}},
-         {"p": {"name": "Product B", "sku": "CP-BBB"}}],  # data query
+        [{"product": {"name": "Product A", "sku": "CP-AAA"}, "manufacturer": "Dow",
+          "industries": [], "has_tds": False, "has_sds": False},
+         {"product": {"name": "Product B", "sku": "CP-BBB"}, "manufacturer": "BASF",
+          "industries": [], "has_tds": False, "has_sds": False}],  # data query
     ])
     svc = KnowledgeBaseService(None, graph)
 
@@ -204,7 +206,8 @@ async def test_list_products_with_search():
     graph = AsyncMock()
     graph.execute_read = AsyncMock(side_effect=[
         [{"total": 1}],  # count query
-        [{"p": {"name": "POLYOX WSR-301", "sku": "CP-AAA"}}],  # data query
+        [{"product": {"name": "POLYOX WSR-301", "sku": "CP-AAA"}, "manufacturer": None,
+          "industries": [], "has_tds": False, "has_sds": False}],  # data query
     ])
     svc = KnowledgeBaseService(None, graph)
 

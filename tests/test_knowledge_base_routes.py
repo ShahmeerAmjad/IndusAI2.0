@@ -62,18 +62,26 @@ class TestListProducts:
     @pytest.mark.asyncio
     async def test_list_products_default(self, setup_services):
         from routes.knowledge_base import list_products
-        result = await list_products(page=1, page_size=25, search=None)
+        result = await list_products(
+            page=1, page_size=25, search=None,
+            manufacturer=None, industry=None, has_tds=None, has_sds=None,
+        )
         assert len(result["items"]) == 2
         setup_services["svc"].list_products.assert_called_once_with(
             page=1, page_size=25, search=None,
+            manufacturer=None, industry=None, has_tds=None, has_sds=None,
         )
 
     @pytest.mark.asyncio
     async def test_list_products_with_search(self, setup_services):
         from routes.knowledge_base import list_products
-        await list_products(page=1, page_size=10, search="epoxy")
+        await list_products(
+            page=1, page_size=10, search="epoxy",
+            manufacturer=None, industry=None, has_tds=None, has_sds=None,
+        )
         setup_services["svc"].list_products.assert_called_once_with(
             page=1, page_size=10, search="epoxy",
+            manufacturer=None, industry=None, has_tds=None, has_sds=None,
         )
 
     @pytest.mark.asyncio
@@ -83,7 +91,10 @@ class TestListProducts:
             "page": 1, "page_size": 25, "total": 42,
         })
         from routes.knowledge_base import list_products
-        result = await list_products(page=1, page_size=25, search=None)
+        result = await list_products(
+            page=1, page_size=25, search=None,
+            manufacturer=None, industry=None, has_tds=None, has_sds=None,
+        )
         assert "total" in result
         assert result["total"] == 42
 
@@ -92,7 +103,10 @@ class TestListProducts:
         set_kb_service(None)
         from routes.knowledge_base import list_products
         with pytest.raises(Exception) as exc_info:
-            await list_products(page=1, page_size=25, search=None)
+            await list_products(
+                page=1, page_size=25, search=None,
+                manufacturer=None, industry=None, has_tds=None, has_sds=None,
+            )
         assert exc_info.value.status_code == 503
 
 
