@@ -347,6 +347,21 @@ async def lifespan(app: FastAPI):
 
     await db_manager.initialize()
 
+    # Initialize LLM Router (Claude + Voyage AI) — independent of Neo4j
+    llm_router = None
+    try:
+        claude_client = ClaudeClient(api_key=settings.anthropic_api_key)
+        embedding_client = VoyageEmbeddingClient(api_key=settings.voyage_api_key)
+        llm_router = LLMRouter(claude_client=claude_client, embedding_client=embedding_client)
+        app.state.llm_router = llm_router
+
+        # Wire intent classifier with LLM router
+        classifier._llm = llm_router
+        logger.info("LLM Router ready (Claude + Voyage AI)")
+    except Exception as e:
+        logger.warning("LLM Router initialization failed (non-fatal): %s", e)
+        app.state.llm_router = None
+
     # Initialize Neo4j Knowledge Graph
     neo4j_client = None
     try:
@@ -361,14 +376,6 @@ async def lifespan(app: FastAPI):
         await create_schema(neo4j_client)
         graph_service = GraphService(neo4j_client)
         logger.info("Neo4j knowledge graph ready")
-
-        # Initialize LLM Router (Claude + Voyage AI)
-        claude_client = ClaudeClient(api_key=settings.anthropic_api_key)
-        embedding_client = VoyageEmbeddingClient(api_key=settings.voyage_api_key)
-        llm_router = LLMRouter(claude_client=claude_client, embedding_client=embedding_client)
-
-        # Wire intent classifier with LLM router
-        classifier._llm = llm_router
 
         # Initialize sourcing intelligence services
         seller_service = SellerService(db_manager, logger)
@@ -412,7 +419,6 @@ async def lifespan(app: FastAPI):
         app.state.neo4j_client = neo4j_client
         app.state.graph_service = graph_service
         app.state.query_engine = query_engine
-        app.state.llm_router = llm_router
         app.state.seller_service = seller_service
 
         # Initialize freshness scheduler
@@ -438,7 +444,6 @@ async def lifespan(app: FastAPI):
         app.state.neo4j_client = None
         app.state.graph_service = None
         app.state.query_engine = None
-        app.state.llm_router = None
 
     # Create platform tables & indexes
     if db_manager.pool:
