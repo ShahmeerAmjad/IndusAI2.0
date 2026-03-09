@@ -56,20 +56,136 @@ class ChempointScraper:
         return products
 
     async def scrape_industry_page(self, url: str) -> list[dict]:
-        """Scrape an industry listing page for product summaries."""
+        """Scrape an industry listing page for product summaries.
+
+        Uses regex to extract product URLs directly from the markdown
+        (the product cards are often past the 12K LLM truncation limit).
+        Falls back to LLM extraction if regex finds nothing.
+        """
         html = await self._fetch_page(url)
+
+        # Extract product URLs and names directly from markdown
+        # Pattern: ## [Product Name](https://www.chempoint.com/products/...)
+        products = []
+        seen_urls = set()
+        for match in re.finditer(
+            r'## \[([^\]]+)\]\((https://www\.chempoint\.com/products/[^)]+)\)', html
+        ):
+            name, product_url = match.group(1), match.group(2)
+            if product_url not in seen_urls:
+                seen_urls.add(product_url)
+                products.append({"name": name, "url": product_url})
+
+        if products:
+            logger.info("Extracted %d product URLs from %s via regex", len(products), url)
+            return products
+
+        # Fallback to LLM extraction
         products = await self._extract_with_llm(html, INDUSTRY_EXTRACTION_PROMPT)
         return products
 
-    async def scrape_manufacturer_page(self, url: str) -> list[dict]:
-        """Scrape a manufacturer page for their product lines."""
+    async def scrape_product_listing(self, url: str) -> list[dict]:
+        """Scrape a product listing page and extract product detail URLs.
+
+        Works for manufacturer product listings (/products/manufacturer-name)
+        and product line listings (/products/mfg/line-name).
+        Only returns URLs with 4+ path segments (actual product detail pages).
+        """
         html = await self._fetch_page(url)
-        products = await self._extract_with_llm(html, PRODUCT_EXTRACTION_PROMPT)
-        return products
+
+        products = []
+        seen_urls = set()
+        for match in re.finditer(
+            r'\[([^\]]+)\]\((https://www\.chempoint\.com/products/[^)]+)\)', html
+        ):
+            name, product_url = match.group(1), match.group(2)
+            if name in ("View Details", "SDS", "TDS", "View All Manufacturer Products"):
+                continue
+            if product_url in seen_urls:
+                continue
+            segments = product_url.replace("https://www.chempoint.com/products/", "").strip("/").split("/")
+            if len(segments) >= 4:
+                seen_urls.add(product_url)
+                products.append({"name": name, "url": product_url})
+
+        if products:
+            logger.info("Extracted %d product URLs from listing page %s", len(products), url)
+            return products
+
+        # Fallback to LLM
+        logger.info("No product URLs found via regex on %s, falling back to LLM", url)
+        return await self._extract_with_llm(html, PRODUCT_EXTRACTION_PROMPT)
+
+    async def scrape_manufacturer_page(self, url: str) -> list[dict]:
+        """Scrape a manufacturer page and follow 'View All Manufacturer Products'.
+
+        Manufacturer pages list product *lines*, not actual products.
+        This method finds the all-products listing URL, fetches it, and
+        extracts individual product detail URLs (4+ path segments).
+        Falls back to LLM extraction if regex finds nothing.
+        """
+        html = await self._fetch_page(url)
+
+        # Look for "View All Manufacturer Products" link
+        all_products_match = re.search(
+            r'\[View All Manufacturer Products\]\((https://www\.chempoint\.com/products/[^)]+)\)',
+            html,
+        )
+        if all_products_match:
+            all_products_url = all_products_match.group(1)
+            logger.info("Following 'View All Manufacturer Products' → %s", all_products_url)
+            html = await self._fetch_page(all_products_url)
+
+        # Extract product detail URLs (4+ path segments = actual products)
+        products = []
+        seen_urls = set()
+        for match in re.finditer(
+            r'\[([^\]]+)\]\((https://www\.chempoint\.com/products/[^)]+)\)', html
+        ):
+            name, product_url = match.group(1), match.group(2)
+            # Skip generic labels and duplicate URLs
+            if name in ("View Details", "SDS", "TDS", "View All Manufacturer Products"):
+                continue
+            if product_url in seen_urls:
+                continue
+            # Only include URLs with 4+ segments (manufacturer/line/subline/product)
+            segments = product_url.replace("https://www.chempoint.com/products/", "").strip("/").split("/")
+            if len(segments) >= 4:
+                seen_urls.add(product_url)
+                products.append({"name": name, "url": product_url})
+
+        if products:
+            logger.info("Extracted %d product URLs from manufacturer page via regex", len(products))
+            return products
+
+        # Fallback to LLM extraction
+        logger.info("No product URLs found via regex, falling back to LLM")
+        return await self._extract_with_llm(html, PRODUCT_EXTRACTION_PROMPT)
 
     async def download_document(self, url: str) -> bytes:
-        """Download a TDS/SDS PDF file."""
-        return await self._download_file(url)
+        """Download a TDS/SDS PDF file.
+
+        Tries direct download first; falls back to Firecrawl if blocked (403)
+        or on timeout.
+        """
+        try:
+            return await self._download_file(url)
+        except httpx.TimeoutException:
+            logger.info("Direct download timed out for %s — trying Firecrawl", url)
+            return await self._download_via_firecrawl(url)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 403:
+                logger.info("Direct download 403 for %s — trying Firecrawl", url)
+                return await self._download_via_firecrawl(url)
+            raise
+
+    async def fetch_document_text(self, url: str) -> str:
+        """Fetch document text via Firecrawl (useful for PDFs behind auth walls).
+
+        Returns the markdown text extracted by Firecrawl, which can be passed
+        directly to the LLM for field extraction — no pdfplumber needed.
+        """
+        return await self._fetch_page(url)
 
     async def crawl_full_catalog(self, base_url: str, max_pages: int = 50) -> list[dict]:
         """Orchestrate a full catalog crawl starting from a base URL."""
@@ -136,7 +252,34 @@ class ChempointScraper:
 
     async def _download_file(self, url: str) -> bytes:
         """Download a file and return its bytes."""
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        timeout = httpx.Timeout(30.0, connect=10.0, read=30.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             return resp.content
+
+    async def _download_via_firecrawl(self, url: str) -> bytes:
+        """Fetch a PDF via Firecrawl and return its content as bytes.
+
+        Firecrawl renders the page with a real browser session, bypassing
+        403s from sites like Chempoint that block direct downloads.
+        Returns markdown text encoded as UTF-8 bytes (not raw PDF binary),
+        so downstream code should use extract_text-based paths.
+        """
+        timeout = httpx.Timeout(90.0, connect=10.0, read=90.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(
+                FIRECRAWL_API_URL,
+                headers={
+                    "Authorization": f"Bearer {self._firecrawl_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"url": url, "formats": ["markdown"]},
+            )
+            if resp.status_code != 200:
+                raise RuntimeError(f"Firecrawl failed for {url}: HTTP {resp.status_code}")
+            data = resp.json().get("data", {})
+            markdown = data.get("markdown", "")
+            if not markdown:
+                raise RuntimeError(f"Firecrawl returned empty content for {url}")
+            return markdown.encode("utf-8")

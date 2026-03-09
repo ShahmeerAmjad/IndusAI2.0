@@ -107,6 +107,7 @@ from routes.documents import router as documents_router, set_document_services
 from routes.customer_accounts import router as customer_accounts_router, set_customer_account_services
 from routes.knowledge_base import router as kb_router, set_kb_service, set_chempoint_scraper
 from routes.ingestion_ws import router as ingestion_ws_router, set_ingestion_pipeline
+from routes.settings import router as settings_router
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -493,6 +494,33 @@ async def lifespan(app: FastAPI):
         "analytics": analytics_service,
     })
 
+    # Seed demo user (idempotent)
+    if settings.debug and db_manager.pool:
+        try:
+            async with db_manager.pool.acquire() as conn:
+                exists = await conn.fetchval(
+                    "SELECT 1 FROM users WHERE email = $1", "demo@indusai.com"
+                )
+                if not exists:
+                    org = await conn.fetchrow(
+                        """INSERT INTO organizations (name, slug)
+                           VALUES ('IndusAI Demo', 'indusai-demo')
+                           ON CONFLICT DO NOTHING
+                           RETURNING id""",
+                    )
+                    org_id = org["id"] if org else await conn.fetchval(
+                        "SELECT id FROM organizations WHERE slug = 'indusai-demo'"
+                    )
+                    pw_hash = auth_service.hash_password("demo1234")
+                    await conn.execute(
+                        """INSERT INTO users (email, password_hash, name, org_id, role)
+                           VALUES ($1, $2, $3, $4, 'admin')""",
+                        "demo@indusai.com", pw_hash, "Demo User", str(org_id),
+                    )
+                    logger.info("Demo user seeded: demo@indusai.com / demo1234")
+        except Exception as e:
+            logger.error("Demo user seed failed: %s", e)
+
     # Seed demo data in debug mode
     if settings.debug and db_manager.pool:
         try:
@@ -692,13 +720,14 @@ async def lifespan(app: FastAPI):
             _ingestion.set_post_ingest_callback(_auto_classify_callback)
             logger.info("Post-ingest auto-classification callback wired")
 
-        # Wire seed-chempoint pipeline
-        _scraper = getattr(app.state, "web_scraper", None)
-        if _tds_sds and doc_service and _scraper:
+        # Wire seed-chempoint pipeline (use ChempointScraper, not WebScraper)
+        _cp_scraper = chempoint_scraper if settings.firecrawl_api_key else None
+        if _tds_sds and doc_service and _cp_scraper:
             from services.ingestion.seed_chempoint import ChempointSeedPipeline
             seed_pipeline = ChempointSeedPipeline(
-                scraper=_scraper, doc_service=doc_service,
+                scraper=_cp_scraper, doc_service=doc_service,
                 graph_service=_tds_sds, db_manager=db_manager,
+                llm_router=_llm,
             )
             set_seed_pipeline(seed_pipeline)
             set_ingestion_pipeline(seed_pipeline)
@@ -758,6 +787,7 @@ app.include_router(documents_router)
 app.include_router(customer_accounts_router)
 app.include_router(kb_router)
 app.include_router(ingestion_ws_router)
+app.include_router(settings_router)
 
 # Rate limiter
 app.state.limiter = limiter

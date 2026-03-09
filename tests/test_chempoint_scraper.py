@@ -134,18 +134,102 @@ async def test_extract_with_llm_no_llm_configured():
 
 
 @pytest.mark.asyncio
-async def test_scrape_manufacturer_page():
-    """Calls _fetch_page + _extract_with_llm."""
+async def test_scrape_product_listing_extracts_detail_urls():
+    """Product listing pages should extract 4+ segment product URLs."""
+    from services.ingestion.chempoint_scraper import ChempointScraper
+    scraper = ChempointScraper(firecrawl_api_key="test-key")
+
+    listing_page = """
+    [Elvacite Specialty Resins](https://www.chempoint.com/products/mca/elvacite-specialty)
+    [Elvacite 4067](https://www.chempoint.com/products/mca/elvacite-specialty/copolymers/elvacite-4067)
+    [View Details](https://www.chempoint.com/products/mca/elvacite-specialty/copolymers/elvacite-4067)
+    [SDS](https://www.chempoint.com/products/download?grade=123)
+    [Lucite 4F](https://www.chempoint.com/products/mca/elvacite-specialty/lucite/lucite-4f)
+    """
+
+    with patch.object(scraper, '_fetch_page', new_callable=AsyncMock) as mock_fetch:
+        mock_fetch.return_value = listing_page
+        products = await scraper.scrape_product_listing("https://www.chempoint.com/products/mca")
+
+    assert len(products) == 2
+    assert products[0]["name"] == "Elvacite 4067"
+    assert products[1]["name"] == "Lucite 4F"
+
+
+@pytest.mark.asyncio
+async def test_scrape_manufacturer_page_follows_all_products_link():
+    """Should follow 'View All Manufacturer Products' and extract product detail URLs."""
+    from services.ingestion.chempoint_scraper import ChempointScraper
+    scraper = ChempointScraper(firecrawl_api_key="test-key")
+
+    mfr_page = """
+    ## Product Lines
+    - [Elvacite Specialty Resins](https://www.chempoint.com/products/mca/elvacite-specialty)
+    - [jER Epoxy Resins](https://www.chempoint.com/products/mca/jer-epoxy)
+    [View All Manufacturer Products](https://www.chempoint.com/products/mca)
+    """
+
+    all_products_page = """
+    [Elvacite 4067](https://www.chempoint.com/products/mca/elvacite-specialty/copolymers/elvacite-4067)
+    [View Details](https://www.chempoint.com/products/mca/elvacite-specialty/copolymers/elvacite-4067)
+    [SDS](https://www.chempoint.com/products/download?grade=123&doctype=sds)
+    [Elvacite 2927](https://www.chempoint.com/products/mca/elvacite-specialty/copolymers/elvacite-2927)
+    [View Details](https://www.chempoint.com/products/mca/elvacite-specialty/copolymers/elvacite-2927)
+    """
+
+    call_count = 0
+    async def mock_fetch(url):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return mfr_page
+        return all_products_page
+
+    with patch.object(scraper, '_fetch_page', side_effect=mock_fetch):
+        products = await scraper.scrape_manufacturer_page("https://chempoint.com/manufacturers/mca")
+
+    assert len(products) == 2
+    assert products[0]["name"] == "Elvacite 4067"
+    assert products[1]["name"] == "Elvacite 2927"
+    # Should have fetched twice: manufacturer page + all-products page
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_scrape_manufacturer_page_skips_product_lines():
+    """Product line URLs (2-3 segments) should be filtered out, only 4+ segment URLs kept."""
+    from services.ingestion.chempoint_scraper import ChempointScraper
+    scraper = ChempointScraper(firecrawl_api_key="test-key")
+
+    # Page without "View All" link — direct product listing with mixed URLs
+    page = """
+    [Elvacite Specialty](https://www.chempoint.com/products/mca/elvacite-specialty)
+    [Elvacite 4067](https://www.chempoint.com/products/mca/elvacite-specialty/copolymers/elvacite-4067)
+    """
+
+    with patch.object(scraper, '_fetch_page', new_callable=AsyncMock) as mock_fetch:
+        mock_fetch.return_value = page
+        products = await scraper.scrape_manufacturer_page("https://chempoint.com/manufacturers/mca")
+
+    # Only the 4-segment URL should be included
+    assert len(products) == 1
+    assert products[0]["name"] == "Elvacite 4067"
+
+
+@pytest.mark.asyncio
+async def test_scrape_manufacturer_page_falls_back_to_llm():
+    """When no product URLs found via regex, falls back to LLM extraction."""
     from services.ingestion.chempoint_scraper import ChempointScraper
     scraper = ChempointScraper(firecrawl_api_key="test-key")
 
     with patch.object(scraper, '_fetch_page', new_callable=AsyncMock) as mock_fetch:
-        mock_fetch.return_value = "<html>mfr page</html>"
+        mock_fetch.return_value = "Some page with no product links"
         with patch.object(scraper, '_extract_with_llm', new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = [{"name": "Product A", "manufacturer": "Dow"}]
-            products = await scraper.scrape_manufacturer_page("https://chempoint.com/mfr/dow")
+            products = await scraper.scrape_manufacturer_page("https://chempoint.com/manufacturers/dow")
+
     assert len(products) == 1
-    mock_fetch.assert_called_once_with("https://chempoint.com/mfr/dow")
+    mock_llm.assert_called_once()
 
 
 @pytest.mark.asyncio

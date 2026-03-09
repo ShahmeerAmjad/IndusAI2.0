@@ -58,6 +58,13 @@ async def graph_visualization(
     return data
 
 
+@router.get("/filters")
+async def get_filters():
+    """Return available manufacturers and industries for filter dropdowns."""
+    svc = _get_svc()
+    return await svc.get_filters()
+
+
 @router.get("/products")
 async def list_products(
     page: int = Query(1, ge=1),
@@ -76,13 +83,6 @@ async def list_products(
         has_tds=has_tds, has_sds=has_sds,
     )
     return result
-
-
-@router.get("/filters")
-async def get_filters():
-    """Return available manufacturers and industries for filter dropdowns."""
-    svc = _get_svc()
-    return await svc.get_filters()
 
 
 @router.get("/products/{product_id}/extraction")

@@ -4,6 +4,7 @@ Orchestrates ChempointScraper, DocumentService, and TDSSDSGraphService
 to populate the knowledge graph from Chempoint catalog pages.
 """
 
+import json
 import logging
 import re
 
@@ -24,12 +25,50 @@ class ChempointSeedPipeline:
         self._llm = llm_router
 
     async def seed_from_url(self, url: str, on_progress=None,
-                            cancel_check=None) -> dict:
-        """Scrape a Chempoint product page and populate the knowledge graph."""
+                            cancel_check=None, max_products: int = 0) -> dict:
+        """Scrape a Chempoint page and populate the knowledge graph.
+
+        Detects URL type automatically:
+        - /manufacturers/* → scrape manufacturer page (follows to all-products listing)
+        - /industries/* → scrape industry page (extracts product URLs, then each product)
+        - /products/* → scrape single product page
+        """
         _emit = on_progress or (lambda e: None)
         _is_cancelled = cancel_check or (lambda: False)
-        _emit({"stage": "scraping", "detail": f"Fetching {url}"})
 
+        # Manufacturer pages list product lines, not products — need special handling
+        if "/manufacturers/" in url:
+            _emit({"stage": "scraping", "detail": f"Detected manufacturer page: {url}"})
+            product_summaries = await self._scraper.scrape_manufacturer_page(url)
+            return await self._seed_from_product_list(
+                product_summaries, on_progress=on_progress, cancel_check=cancel_check,
+                max_products_remaining=max_products,
+            )
+
+        # Industry sub-pages list products with URLs
+        if "/industries/" in url:
+            _emit({"stage": "scraping", "detail": f"Detected industry page: {url}"})
+            return await self.seed_from_industry(url, on_progress=on_progress,
+                                                  cancel_check=cancel_check,
+                                                  max_products_remaining=max_products)
+
+        # Product listing pages (1-3 path segments) are not single product pages —
+        # they list many products. Extract product URLs and recurse into each.
+        # e.g. /products/mitsubishi-chemical-america (1 seg)
+        #      /products/dow/dow-paraloid-impact-modifiers (2 segs)
+        #      /products/dow/dow-paraloid-impact-modifiers/paraloid-bta (3 segs)
+        # vs. /products/dow/dow-paraloid/paraloid-bta/paraloid-bta-730 (4 segs = detail)
+        if "/products/" in url:
+            segments = url.split("/products/")[-1].strip("/").split("/")
+            if len(segments) < 4:
+                _emit({"stage": "scraping", "detail": f"Detected product listing page: {url}"})
+                product_summaries = await self._scraper.scrape_product_listing(url)
+                return await self._seed_from_product_list(
+                    product_summaries, on_progress=on_progress, cancel_check=cancel_check,
+                    max_products_remaining=max_products,
+                )
+
+        _emit({"stage": "scraping", "detail": f"Fetching {url}"})
         products = await self._scraper.scrape_product_page(url)
         total = len(products)
 
@@ -60,25 +99,49 @@ class ChempointSeedPipeline:
         logger.info("Seed pipeline complete: %s", stats)
         return stats
 
+    async def _seed_from_product_list(self, product_summaries: list[dict],
+                                      on_progress=None,
+                                      max_products_remaining: int = 0,
+                                      cancel_check=None) -> dict:
+        """Process a list of {name, url} product summaries by seeding each URL."""
+        _emit = on_progress or (lambda e: None)
+        _is_cancelled = cancel_check or (lambda: False)
+        stats = {"products_created": 0, "products_updated": 0, "tds_stored": 0,
+                 "sds_stored": 0, "industries_linked": 0, "errors": 0}
+
+        for summary in product_summaries:
+            if _is_cancelled():
+                break
+            if max_products_remaining and stats["products_created"] >= max_products_remaining:
+                break
+            product_url = summary.get("url")
+            if not product_url:
+                continue
+            _emit({"stage": "discovering", "detail": f"Following product: {summary.get('name', product_url)}"})
+            try:
+                # Recurse — product URLs go through scrape_product_page path
+                sub_stats = await self.seed_from_url(
+                    product_url, on_progress=on_progress, cancel_check=cancel_check,
+                )
+                for k in stats:
+                    stats[k] += sub_stats.get(k, 0)
+            except Exception as e:
+                logger.error("Failed to seed product %s: %s", product_url, e)
+                stats["errors"] += 1
+                _emit({"stage": "error", "product": summary.get("name", ""), "detail": str(e)})
+
+        return stats
+
     async def seed_from_industry(self, url: str, on_progress=None,
                                   max_products_remaining: int = 0,
                                   cancel_check=None) -> dict:
         """Scrape an industry page then process each product."""
         product_summaries = await self._scraper.scrape_industry_page(url)
-        stats = {"products_created": 0, "products_updated": 0, "tds_stored": 0,
-                 "sds_stored": 0, "industries_linked": 0, "errors": 0}
-
-        for summary in product_summaries:
-            if max_products_remaining and stats["products_created"] >= max_products_remaining:
-                break
-            product_url = summary.get("url")
-            if product_url:
-                sub_stats = await self.seed_from_url(product_url, on_progress=on_progress,
-                                                     cancel_check=cancel_check)
-                for k in stats:
-                    stats[k] += sub_stats.get(k, 0)
-
-        return stats
+        return await self._seed_from_product_list(
+            product_summaries, on_progress=on_progress,
+            max_products_remaining=max_products_remaining,
+            cancel_check=cancel_check,
+        )
 
     async def seed_from_industries(self, industry_urls: list[str],
                                     on_progress=None,
@@ -130,12 +193,18 @@ class ChempointSeedPipeline:
                 sku, name, manufacturer, product_data.get("description", ""),
             )
 
-        product_id = str(row["id"])
+        product_id = row["id"]  # UUID from PG — keep as-is for FK inserts
         # xmax = 0 means INSERT, > 0 means UPDATE
         if row.get("xmax", 0) == 0:
             stats["products_created"] += 1
         else:
             stats["products_updated"] += 1
+
+        # Ensure Part node exists in Neo4j (graph operations need it)
+        await self._graph.ensure_part(
+            sku=sku, name=name, manufacturer=manufacturer,
+            description=product_data.get("description", ""),
+        )
 
         # Download and process TDS
         tds_url = product_data.get("tds_url")
@@ -160,7 +229,12 @@ class ChempointSeedPipeline:
     async def _process_document(self, product_id: str, sku: str,
                                 doc_url: str, doc_type: str, stats: dict,
                                 _emit=None) -> None:
-        """Download a TDS/SDS PDF, extract text and fields, create graph node."""
+        """Download a TDS/SDS PDF, extract text and fields, create graph node.
+
+        Uses scraper.download_document (which falls back to Firecrawl on 403).
+        If pdfplumber can't parse the result (e.g. Firecrawl returned markdown
+        bytes), falls back to Firecrawl text extraction directly.
+        """
         _emit = _emit or (lambda e: None)
         try:
             _emit({"stage": "downloading_pdf", "product": sku,
@@ -175,22 +249,49 @@ class ChempointSeedPipeline:
             )
 
             _emit({"stage": "extracting", "product": sku,
-                   "detail": f"OCR + Claude extraction for {doc_type}"})
-            text = await self._doc.extract_text_from_pdf(file_bytes)
+                   "detail": f"Extracting {doc_type} fields"})
+
+            # Try pdfplumber first; if it fails (e.g. content is Firecrawl
+            # markdown, not a real PDF), decode the bytes as text.
+            try:
+                text = await self._doc.extract_text_from_pdf(file_bytes)
+            except Exception:
+                logger.info("pdfplumber failed for %s — treating content as text", sku)
+                text = file_bytes.decode("utf-8", errors="replace")
+
+            if not text:
+                # Last resort: fetch text via Firecrawl directly
+                text = await self._scraper.fetch_document_text(doc_url)
+
+            if not text:
+                logger.warning("No text extracted for %s %s", doc_type, doc_url)
+                stats["errors"] = stats.get("errors", 0) + 1
+                return
 
             if doc_type == "TDS":
                 raw_fields = await self._doc.extract_tds_fields_with_confidence(text)
             else:
                 raw_fields = await self._doc.extract_sds_fields_with_confidence(text)
 
-            # Flatten for graph (store values only)
+            # Flatten for graph: unwrap confidence wrappers, serialize
+            # complex values (Neo4j only stores primitives and arrays of
+            # primitives).
             flat_fields = {}
             for k, v in raw_fields.items():
                 if isinstance(v, dict) and "value" in v:
-                    flat_fields[k] = v["value"]
+                    v = v["value"]
+                if v is None:
+                    continue
+                # Neo4j can't store dicts or lists-of-dicts — serialize to JSON
+                if isinstance(v, dict):
+                    flat_fields[k] = json.dumps(v)
+                elif isinstance(v, list) and v and isinstance(v[0], dict):
+                    flat_fields[k] = json.dumps(v)
                 else:
                     flat_fields[k] = v
             flat_fields["pdf_url"] = doc_url
+            # Ensure revision_date has a value (required by MERGE key)
+            flat_fields.setdefault("revision_date", "unknown")
 
             _emit({"stage": "building_graph", "product": sku,
                    "detail": f"{doc_type}: {len(flat_fields)} fields extracted"})

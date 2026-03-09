@@ -9,18 +9,13 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path("data/documents")
 
-TDS_EXTRACTION_PROMPT = """Extract the following fields from this Technical Data Sheet text.
-Return JSON with keys: appearance, density, flash_point, pH, viscosity,
-storage_conditions, melting_point, boiling_point, solubility, molecular_weight.
-Omit keys if data is not present. Text:
+TDS_EXTRACTION_PROMPT = """Extract ALL available fields from this Technical Data Sheet.
+Return a JSON object. Omit keys where data is not present. Text:
 
 {text}"""
 
-SDS_EXTRACTION_PROMPT = """Extract the following fields from this Safety Data Sheet text.
-Return JSON with keys: ghs_classification, cas_numbers (list), un_number,
-hazard_statements (list), precautionary_statements (list), first_aid,
-ppe_requirements, storage_requirements, disposal_methods.
-Omit keys if data is not present. Text:
+SDS_EXTRACTION_PROMPT = """Extract ALL available fields from this Safety Data Sheet.
+Return a JSON object. Omit keys where data is not present. Text:
 
 {text}"""
 
@@ -29,10 +24,29 @@ For each field, return a JSON object with "value" and "confidence" (0.0-1.0).
 Confidence reflects how certain you are the extracted value is correct.
 If a field is not found, return {{"value": null, "confidence": 0.0}}.
 
-Fields to extract:
-- appearance, color, odor, density, viscosity, pH, flash_point
-- boiling_point, melting_point, solubility, molecular_weight
-- shelf_life, storage_conditions, recommended_uses (list)
+PHYSICAL PROPERTIES:
+- appearance, color, odor, form (solid/liquid/powder/pellet)
+- density, specific_gravity, bulk_density
+- viscosity, pH, molecular_weight
+- flash_point, boiling_point, melting_point, glass_transition_temp
+- solubility, vapor_pressure, particle_size, refractive_index
+
+PERFORMANCE & APPLICATION:
+- recommended_uses (list), application_method, application_temperature
+- mix_ratio, cure_time, pot_life, open_time, set_time
+- tensile_strength, elongation, hardness, impact_strength
+- heat_deflection_temp, thermal_conductivity
+- adhesion_strength, peel_strength, shear_strength
+- compatibility (list of compatible substrates/materials)
+
+STORAGE & HANDLING:
+- shelf_life, storage_conditions, storage_temperature
+- packaging (available sizes/containers)
+
+REGULATORY & IDENTIFICATION:
+- product_name, manufacturer, product_line
+- regulatory_approvals (list: FDA, NSF, Kosher, Halal, etc.)
+- revision_date
 
 Return ONLY valid JSON object. No markdown.
 
@@ -44,11 +58,50 @@ For each field, return a JSON object with "value" and "confidence" (0.0-1.0).
 Confidence reflects how certain you are the extracted value is correct.
 If a field is not found, return {{"value": null, "confidence": 0.0}}.
 
-Fields to extract:
-- ghs_classification, hazard_statements (list), precautionary_statements (list)
-- cas_numbers (list), un_number, dot_class
-- first_aid, fire_fighting, ppe_requirements
-- environmental_hazards, disposal_methods, transport_info
+IDENTIFICATION (Section 1):
+- product_name, supplier, emergency_phone, revision_date, sds_number
+
+HAZARD IDENTIFICATION (Section 2):
+- ghs_classification (list), signal_word (Danger/Warning/None)
+- hazard_pictograms (list of GHS codes, e.g. GHS05, GHS07)
+- hazard_statements (list with H-codes, e.g. "H314 Causes severe skin burns")
+- precautionary_statements (list with P-codes)
+
+COMPOSITION (Section 3):
+- components (list of objects: {{"name", "cas_number", "concentration"}})
+
+FIRST AID (Section 4):
+- first_aid_inhalation, first_aid_skin, first_aid_eyes, first_aid_ingestion
+
+FIRE FIGHTING (Section 5):
+- extinguishing_media, fire_fighting_equipment
+
+PPE & EXPOSURE (Section 8):
+- exposure_limits (list of objects: {{"substance", "type", "value"}})
+- respiratory_protection, hand_protection, eye_protection, skin_protection
+
+PHYSICAL PROPERTIES (Section 9):
+- appearance, color, odor, pH, density, viscosity
+- boiling_point, flash_point, vapor_pressure, solubility
+
+STABILITY & REACTIVITY (Section 10):
+- stability, incompatible_materials, decomposition_products
+
+TOXICOLOGY (Section 11):
+- ld50_oral, lc50_inhalation, skin_corrosion, eye_damage
+- carcinogenicity, reproductive_toxicity, mutagenicity
+
+ECOLOGY (Section 12):
+- ecotoxicity_fish, ecotoxicity_daphnia, biodegradability, bioaccumulation
+
+DISPOSAL (Section 13):
+- disposal_methods
+
+TRANSPORT (Section 14):
+- un_number, shipping_name, hazard_class, packing_group
+
+REGULATORY (Section 15):
+- sara_313, california_prop_65, cercla_rq
 
 Return ONLY valid JSON object. No markdown.
 
@@ -65,7 +118,7 @@ class DocumentService:
                              file_bytes: bytes, file_name: str,
                              source_url: str | None = None) -> dict:
         """Save document file to disk and insert metadata into documents table."""
-        doc_dir = DATA_DIR / product_id
+        doc_dir = DATA_DIR / str(product_id)
         doc_dir.mkdir(parents=True, exist_ok=True)
         file_path = str(doc_dir / f"{doc_type}_{file_name}")
         with open(file_path, "wb") as f:
@@ -85,19 +138,19 @@ class DocumentService:
 
     async def extract_tds_fields_with_confidence(self, text: str) -> dict:
         """Extract TDS fields with per-field confidence scores."""
-        return await self._call_llm(TDS_CONFIDENCE_PROMPT.format(text=text[:8000]))
+        return await self._call_llm(TDS_CONFIDENCE_PROMPT.format(text=text[:12000]))
 
     async def extract_sds_fields_with_confidence(self, text: str) -> dict:
         """Extract SDS fields with per-field confidence scores."""
-        return await self._call_llm(SDS_CONFIDENCE_PROMPT.format(text=text[:8000]))
+        return await self._call_llm(SDS_CONFIDENCE_PROMPT.format(text=text[:12000]))
 
     async def extract_tds_fields(self, text: str) -> dict:
         """Use LLM to extract structured TDS fields from raw text."""
-        return await self._call_llm(TDS_EXTRACTION_PROMPT.format(text=text[:8000]))
+        return await self._call_llm(TDS_EXTRACTION_PROMPT.format(text=text[:12000]))
 
     async def extract_sds_fields(self, text: str) -> dict:
         """Use LLM to extract structured SDS fields from raw text."""
-        return await self._call_llm(SDS_EXTRACTION_PROMPT.format(text=text[:8000]))
+        return await self._call_llm(SDS_EXTRACTION_PROMPT.format(text=text[:12000]))
 
     async def get_documents_for_product(self, product_id: str) -> list[dict]:
         """Return current TDS/SDS documents for a product."""
@@ -118,6 +171,16 @@ class DocumentService:
                 "SELECT * FROM documents WHERE id = $1", doc_id,
             )
         return dict(row) if row else None
+
+    async def count_documents(self) -> dict:
+        """Return total document count and breakdown by type."""
+        async with self._db.pool.acquire() as conn:
+            total = await conn.fetchval("SELECT COUNT(*) FROM documents")
+            rows = await conn.fetch(
+                "SELECT doc_type, COUNT(*) AS cnt FROM documents GROUP BY doc_type"
+            )
+        by_type = {r["doc_type"]: r["cnt"] for r in rows}
+        return {"total": total or 0, "tds": by_type.get("TDS", 0), "sds": by_type.get("SDS", 0)}
 
     async def search_documents(self, query: str, doc_type: str | None = None,
                                limit: int = 20) -> list[dict]:
@@ -154,7 +217,12 @@ class DocumentService:
         """Call AI service and parse JSON response."""
         if self._ai is None:
             raise RuntimeError("AI service not configured")
-        raw = await self._ai.chat(prompt)
+        raw = await self._ai.chat(
+            messages=[{"role": "user", "content": prompt}],
+            task="tds_extraction",
+            max_tokens=8192,
+            temperature=0.1,
+        )
         cleaned = raw.strip()
         if cleaned.startswith("```"):
             first_newline = cleaned.index("\n")

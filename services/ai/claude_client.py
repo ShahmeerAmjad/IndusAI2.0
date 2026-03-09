@@ -21,8 +21,8 @@ except ImportError:
 # Claude model tiers
 CLAUDE_MODELS = {
     "fast": "claude-haiku-4-5-20251001",
-    "standard": "claude-sonnet-4-6-20250514",
-    "heavy": "claude-opus-4-6-20250610",
+    "standard": "claude-sonnet-4-20250514",
+    "heavy": "claude-opus-4-20250514",
 }
 
 
@@ -90,7 +90,7 @@ class ClaudeClient:
         logger.info("Claude client initialized")
 
     async def chat(self, messages: list[dict], system: str | None = None,
-                   model: str = "claude-sonnet-4-6-20250514",
+                   model: str = "claude-sonnet-4-20250514",
                    max_tokens: int = 1024, temperature: float = 0.3) -> str:
         """Send a chat request to Claude with retry and circuit breaker.
 
@@ -145,6 +145,90 @@ class ClaudeClient:
             except Exception as e:
                 last_error = e
                 logger.error("Claude chat failed (attempt %d/%d): %s",
+                             attempt + 1, self._max_retries, e)
+                if attempt < self._max_retries - 1:
+                    await asyncio.sleep(self._retry_delay * (2 ** attempt))
+
+        self._circuit_breaker.record_failure()
+        raise RuntimeError(f"Claude API failed after {self._max_retries} attempts: {last_error}")
+
+    async def chat_with_compaction(
+        self,
+        messages: list[dict],
+        system: str | None = None,
+        model: str = "claude-sonnet-4-20250514",
+        max_tokens: int = 1024,
+        temperature: float = 0.3,
+        compaction_control: dict | None = None,
+    ) -> str:
+        """Chat with optional context compaction support.
+
+        When compaction_control is provided, passes it to the Anthropic SDK.
+        If the SDK version doesn't support compaction_control yet, falls back
+        to a regular chat() call with a warning.
+        """
+        if not compaction_control:
+            return await self.chat(
+                messages, system=system, model=model,
+                max_tokens=max_tokens, temperature=temperature,
+            )
+
+        resolved_model = CLAUDE_MODELS.get(model, model)
+
+        if not self._circuit_breaker.can_execute():
+            raise RuntimeError("Circuit breaker is OPEN — Claude API unavailable")
+
+        last_error = None
+        for attempt in range(self._max_retries):
+            try:
+                kwargs = {
+                    "model": resolved_model,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "messages": messages,
+                    "compaction_control": compaction_control,
+                }
+                if system:
+                    kwargs["system"] = system
+
+                try:
+                    response = await self._client.messages.create(**kwargs)
+                except TypeError as te:
+                    if "compaction_control" in str(te):
+                        logger.warning(
+                            "SDK does not support compaction_control yet, "
+                            "falling back to regular chat: %s", te,
+                        )
+                        return await self.chat(
+                            messages, system=system, model=model,
+                            max_tokens=max_tokens, temperature=temperature,
+                        )
+                    raise
+
+                self._circuit_breaker.record_success()
+                return response.content[0].text.strip()
+
+            except anthropic.RateLimitError as e:
+                last_error = e
+                wait = self._retry_delay * (2 ** attempt)
+                logger.warning("Rate limited (attempt %d/%d), waiting %.1fs",
+                               attempt + 1, self._max_retries, wait)
+                await asyncio.sleep(wait)
+
+            except anthropic.APIStatusError as e:
+                last_error = e
+                if e.status_code >= 500:
+                    wait = self._retry_delay * (2 ** attempt)
+                    logger.warning("Server error %d (attempt %d/%d), retrying in %.1fs",
+                                   e.status_code, attempt + 1, self._max_retries, wait)
+                    await asyncio.sleep(wait)
+                else:
+                    self._circuit_breaker.record_failure()
+                    raise
+
+            except Exception as e:
+                last_error = e
+                logger.error("Claude chat_with_compaction failed (attempt %d/%d): %s",
                              attempt + 1, self._max_retries, e)
                 if attempt < self._max_retries - 1:
                     await asyncio.sleep(self._retry_delay * (2 ** attempt))

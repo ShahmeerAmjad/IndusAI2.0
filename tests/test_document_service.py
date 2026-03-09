@@ -124,18 +124,19 @@ class TestExtraction:
     @pytest.mark.asyncio
     async def test_extract_tds_fields_truncates_long_text(self):
         svc = DocumentService(db_manager=MagicMock(), ai_service=MagicMock())
-        captured_prompt = None
-        async def capture_chat(prompt, **kwargs):
-            nonlocal captured_prompt
-            captured_prompt = prompt
+        captured_messages = None
+        async def capture_chat(messages, **kwargs):
+            nonlocal captured_messages
+            captured_messages = messages
             return '{"density": "1.0"}'
         svc._ai.chat = capture_chat
 
         long_text = "A" * 20000
         await svc.extract_tds_fields(long_text)
 
-        # The text portion of the prompt should be truncated
-        assert len(captured_prompt) < 10000  # 8000 chars + prompt template
+        # The text portion of the prompt should be truncated (12000 chars + prompt template)
+        prompt_text = captured_messages[0]["content"]
+        assert len(prompt_text) < 14000
 
 
 class TestCallLLM:

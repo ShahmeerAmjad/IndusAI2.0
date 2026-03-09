@@ -20,6 +20,7 @@ export default function Products() {
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
   const [drawerSku, setDrawerSku] = useState<string | null>(null);
 
+  // Derive has_tds / has_sds from docFilter
   const filterParams = useMemo(() => {
     const p: { has_tds?: boolean; has_sds?: boolean } = {};
     if (docFilter === "has_tds") p.has_tds = true;

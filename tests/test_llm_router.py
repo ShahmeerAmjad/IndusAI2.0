@@ -146,6 +146,45 @@ class TestLLMRouter:
         assert result == [[0.1, 0.2, 0.3]]
         mock_embeddings.embed.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_chat_with_compaction_no_control_falls_back(self):
+        """When compaction_control is None, delegates to regular chat()."""
+        mock_claude = AsyncMock()
+        mock_claude.chat.return_value = "regular response"
+        mock_embeddings = AsyncMock()
+
+        router = LLMRouter(claude_client=mock_claude, embedding_client=mock_embeddings)
+        result = await router.chat_with_compaction(
+            [{"role": "user", "content": "test"}],
+            task="response_generation",
+            compaction_control=None,
+        )
+
+        assert result == "regular response"
+        mock_claude.chat.assert_called_once()
+        mock_claude.chat_with_compaction.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_chat_with_compaction_delegates_to_claude(self):
+        """When compaction_control is provided, delegates to claude's chat_with_compaction."""
+        mock_claude = AsyncMock()
+        mock_claude.chat_with_compaction.return_value = "compacted response"
+        mock_embeddings = AsyncMock()
+
+        router = LLMRouter(claude_client=mock_claude, embedding_client=mock_embeddings)
+        compaction = {"type": "auto", "threshold_tokens": 1000}
+        result = await router.chat_with_compaction(
+            [{"role": "user", "content": "test"}],
+            task="intent_classification",
+            compaction_control=compaction,
+        )
+
+        assert result == "compacted response"
+        mock_claude.chat_with_compaction.assert_called_once()
+        call_kwargs = mock_claude.chat_with_compaction.call_args[1]
+        assert call_kwargs["model"] == "fast"
+        assert call_kwargs["compaction_control"] == compaction
+
     def test_get_health(self):
         mock_claude = MagicMock()
         mock_claude.get_circuit_breaker_state.return_value = {"state": "closed"}

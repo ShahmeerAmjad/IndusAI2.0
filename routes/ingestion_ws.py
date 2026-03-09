@@ -31,6 +31,7 @@ def is_cancelled(job_id: str) -> bool:
 
 class StartIngestionRequest(BaseModel):
     url: str
+    max_products: int = 0  # 0 = unlimited
 
 
 class StartBatchRequest(BaseModel):
@@ -50,13 +51,14 @@ async def _broadcast(job_id: str, event: dict):
             pass
 
 
-async def _run_single(job_id: str, url: str):
+async def _run_single(job_id: str, url: str, max_products: int = 0):
     """Run single-URL ingestion with proper error broadcasting."""
     try:
         cancel_fn = lambda: is_cancelled(job_id)
         broadcast_fn = lambda event: asyncio.ensure_future(_broadcast(job_id, event))
         result = await _pipeline.seed_from_url(
             url, on_progress=broadcast_fn, cancel_check=cancel_fn,
+            max_products=max_products,
         )
         _jobs[job_id]["status"] = "completed"
         _jobs[job_id]["result"] = result
@@ -98,7 +100,7 @@ async def start_ingestion(req: StartIngestionRequest):
     _job_events[job_id] = []
     _job_subscribers[job_id] = []
 
-    asyncio.create_task(_run_single(job_id, req.url))
+    asyncio.create_task(_run_single(job_id, req.url, req.max_products))
     return {"job_id": job_id, "status": "running"}
 
 

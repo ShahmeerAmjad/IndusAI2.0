@@ -184,9 +184,9 @@ async def test_list_products_basic():
     graph.execute_read = AsyncMock(side_effect=[
         [{"total": 2}],  # count query
         [{"product": {"name": "Product A", "sku": "CP-AAA"}, "manufacturer": "Dow",
-          "industries": [], "has_tds": False, "has_sds": False},
-         {"product": {"name": "Product B", "sku": "CP-BBB"}, "manufacturer": "BASF",
-          "industries": [], "has_tds": False, "has_sds": False}],  # data query
+          "industries": ["Adhesives"], "has_tds": True, "has_sds": False},
+         {"product": {"name": "Product B", "sku": "CP-BBB"}, "manufacturer": None,
+          "industries": [], "has_tds": False, "has_sds": False}],
     ])
     svc = KnowledgeBaseService(None, graph)
 
@@ -196,6 +196,8 @@ async def test_list_products_basic():
     assert result["page"] == 1
     assert result["page_size"] == 25
     assert result["total"] == 2
+    assert result["items"][0]["manufacturer"] == "Dow"
+    assert result["items"][0]["has_tds"] is True
     assert graph.execute_read.call_count == 2
 
 
@@ -206,8 +208,8 @@ async def test_list_products_with_search():
     graph = AsyncMock()
     graph.execute_read = AsyncMock(side_effect=[
         [{"total": 1}],  # count query
-        [{"product": {"name": "POLYOX WSR-301", "sku": "CP-AAA"}, "manufacturer": None,
-          "industries": [], "has_tds": False, "has_sds": False}],  # data query
+        [{"product": {"name": "POLYOX WSR-301", "sku": "CP-AAA"}, "manufacturer": "Dow",
+          "industries": [], "has_tds": False, "has_sds": False}],
     ])
     svc = KnowledgeBaseService(None, graph)
 
@@ -242,6 +244,108 @@ async def test_list_products_pagination():
     params = call_args[0][1]
     assert params["skip"] == 20
     assert params["limit"] == 10
+
+
+@pytest.mark.asyncio
+async def test_list_products_with_manufacturer_filter():
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = AsyncMock()
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"total": 1}],
+        [{"product": {"sku": "X-1", "name": "Epoxy A"}, "manufacturer": "Dow",
+          "industries": ["Adhesives"], "has_tds": True, "has_sds": False}],
+    ])
+    svc = KnowledgeBaseService(None, graph)
+    result = await svc.list_products(page=1, page_size=25, manufacturer="Dow")
+    assert result["total"] == 1
+    assert result["items"][0]["manufacturer"] == "Dow"
+
+
+@pytest.mark.asyncio
+async def test_list_products_with_has_tds_filter():
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = AsyncMock()
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"total": 1}],
+        [{"product": {"sku": "X-1", "name": "Epoxy A"}, "manufacturer": "Dow",
+          "industries": [], "has_tds": True, "has_sds": False}],
+    ])
+    svc = KnowledgeBaseService(None, graph)
+    result = await svc.list_products(has_tds=True)
+    assert result["total"] == 1
+
+
+# ── get_filters ──
+
+
+@pytest.mark.asyncio
+async def test_get_filters_returns_manufacturers_and_industries():
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = MagicMock()
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"name": "Dow"}, {"name": "BASF"}],  # manufacturers
+        [{"name": "Adhesives"}, {"name": "Coatings"}],  # industries
+    ])
+    svc = KnowledgeBaseService(pool=None, graph_service=graph)
+    result = await svc.get_filters()
+    assert result == {
+        "manufacturers": ["Dow", "BASF"],
+        "industries": ["Adhesives", "Coatings"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_filters_empty():
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = MagicMock()
+    graph.execute_read = AsyncMock(side_effect=[[], []])
+    svc = KnowledgeBaseService(pool=None, graph_service=graph)
+    result = await svc.get_filters()
+    assert result == {"manufacturers": [], "industries": []}
+
+
+# ── get_product_extraction ──
+
+
+@pytest.mark.asyncio
+async def test_get_product_extraction_returns_tds_sds_fields():
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = MagicMock()
+    graph.execute_read = AsyncMock(side_effect=[
+        [{"props": {"appearance": {"value": "Clear liquid", "confidence": 0.95},
+                     "product_sku": "SKU-001", "pdf_url": "https://example.com/tds.pdf"}}],
+        [{"props": {"ghs_classification": {"value": "Flam. Liq. 3", "confidence": 0.9},
+                     "product_sku": "SKU-001", "cas_numbers": ["64-17-5"]}}],
+    ])
+    svc = KnowledgeBaseService(pool=None, graph_service=graph)
+    result = await svc.get_product_extraction("SKU-001")
+    assert result["sku"] == "SKU-001"
+    assert "appearance" in result["tds"]["fields"]
+    assert result["tds"]["fields"]["appearance"]["confidence"] == 0.95
+    assert result["tds"]["pdf_url"] == "https://example.com/tds.pdf"
+    assert "ghs_classification" in result["sds"]["fields"]
+    assert result["sds"]["cas_numbers"] == ["64-17-5"]
+    # Metadata keys should not be in fields
+    assert "product_sku" not in result["tds"]["fields"]
+    assert "product_sku" not in result["sds"]["fields"]
+
+
+@pytest.mark.asyncio
+async def test_get_product_extraction_no_docs():
+    from services.knowledge_base_service import KnowledgeBaseService
+
+    graph = MagicMock()
+    graph.execute_read = AsyncMock(side_effect=[[], []])
+    svc = KnowledgeBaseService(pool=None, graph_service=graph)
+    result = await svc.get_product_extraction("NO-DOCS")
+    assert result["sku"] == "NO-DOCS"
+    assert result["tds"]["fields"] == {}
+    assert result["sds"]["fields"] == {}
 
 
 # ── get_product ──

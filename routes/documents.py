@@ -29,6 +29,13 @@ def _require_service():
 # ── Endpoints ──
 
 
+@router.get("/count")
+async def get_document_count():
+    """Return total document count and breakdown by type (TDS/SDS)."""
+    svc = _require_service()
+    return await svc.count_documents()
+
+
 @router.get("/product/{product_id}")
 async def list_documents_for_product(product_id: str):
     """List current TDS/SDS documents for a product."""

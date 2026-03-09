@@ -126,7 +126,7 @@ class KnowledgeBaseService:
     # ------------------------------------------------------------------
 
     async def get_graph_visualization(self, industry=None, manufacturer=None, limit=100):
-        """Query Neo4j for nodes and edges, formatted for Neovis.js."""
+        """Query Neo4j for nodes and edges, formatted for react-force-graph."""
         conditions = []
         params = {"limit": limit}
 
@@ -142,12 +142,13 @@ class KnowledgeBaseService:
         cypher = f"""
         MATCH (p:Part)
         {where}
+        OPTIONAL MATCH (p)-[:MANUFACTURED_BY]->(m:Manufacturer)
+        OPTIONAL MATCH (p)-[:BELONGS_TO]->(c:Category)
         OPTIONAL MATCH (p)-[:HAS_TDS]->(t:TechnicalDataSheet)
         OPTIONAL MATCH (p)-[:HAS_SDS]->(s:SafetyDataSheet)
         OPTIONAL MATCH (p)-[:SERVES_INDUSTRY]->(i:Industry)
         OPTIONAL MATCH (p)-[:BELONGS_TO]->(pl:ProductLine)
-        OPTIONAL MATCH (pl)-[:MADE_BY]->(m:Manufacturer)
-        RETURN p, t, s, i, pl, m
+        RETURN p, m, c, t, s, i, pl
         LIMIT $limit
         """
 
@@ -155,15 +156,17 @@ class KnowledgeBaseService:
 
         nodes = {}
         edges = []
+        seen_edges = set()
 
         for record in results:
             for key, label, color in [
                 ("p", "Product", "#1e3a8a"),
+                ("m", "Manufacturer", "#059669"),
+                ("c", "Category", "#0d9488"),
                 ("t", "TDS", "#7c3aed"),
                 ("s", "SDS", "#dc2626"),
                 ("i", "Industry", "#f59e0b"),
                 ("pl", "ProductLine", "#0d9488"),
-                ("m", "Manufacturer", "#059669"),
             ]:
                 node = record.get(key)
                 if node:
@@ -180,17 +183,20 @@ class KnowledgeBaseService:
             if not p_id:
                 continue
             for key, label, rel in [
-                ("t", "TDS", "HAS_TDS"), ("s", "SDS", "HAS_SDS"),
-                ("i", "Industry", "SERVES_INDUSTRY"), ("pl", "ProductLine", "BELONGS_TO"),
+                ("m", "Manufacturer", "MANUFACTURED_BY"),
+                ("c", "Category", "BELONGS_TO"),
+                ("t", "TDS", "HAS_TDS"),
+                ("s", "SDS", "HAS_SDS"),
+                ("i", "Industry", "SERVES_INDUSTRY"),
+                ("pl", "ProductLine", "BELONGS_TO"),
             ]:
                 target = record.get(key)
                 if target:
                     t_id = f"{label}:{target.get('name') or target.get('product_sku', '')}"
-                    edges.append({"source": p_id, "target": t_id, "relationship": rel})
-            if record.get("pl") and record.get("m"):
-                pl_id = f"ProductLine:{record['pl'].get('name', '')}"
-                m_id = f"Manufacturer:{record['m'].get('name', '')}"
-                edges.append({"source": pl_id, "target": m_id, "relationship": "MADE_BY"})
+                    edge_key = (p_id, t_id, rel)
+                    if edge_key not in seen_edges:
+                        seen_edges.add(edge_key)
+                        edges.append({"source": p_id, "target": t_id, "relationship": rel})
 
         return {"nodes": list(nodes.values()), "edges": edges}
 
@@ -204,6 +210,7 @@ class KnowledgeBaseService:
         skip = (page - 1) * page_size
         params: dict = {"skip": skip, "limit": page_size}
 
+        # Build WHERE conditions
         conditions = []
         if search:
             conditions.append(
@@ -221,6 +228,7 @@ class KnowledgeBaseService:
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
+        # Optional TDS/SDS existence filters applied after aggregation
         having = []
         if has_tds is True:
             having.append("has_tds = true")
@@ -269,6 +277,100 @@ class KnowledgeBaseService:
 
         return {"items": items, "page": page, "page_size": page_size, "total": total}
 
+    # ------------------------------------------------------------------
+    # Filters & Extraction
+    # ------------------------------------------------------------------
+
+    async def get_filters(self) -> dict:
+        """Return available filter values for the product catalog."""
+        mfr_results = await self._graph.execute_read(
+            "MATCH (m:Manufacturer) RETURN m.name AS name ORDER BY m.name", {}
+        )
+        ind_results = await self._graph.execute_read(
+            "MATCH (i:Industry) RETURN i.name AS name ORDER BY i.name", {}
+        )
+        return {
+            "manufacturers": [r["name"] for r in mfr_results],
+            "industries": [r["name"] for r in ind_results],
+        }
+
+    async def get_product_extraction(self, sku: str) -> dict:
+        """Return full TDS + SDS extracted fields for a product from Neo4j.
+
+        Also looks up locally stored documents from PostgreSQL so the frontend
+        can serve PDFs from our backend instead of linking to external URLs.
+        """
+        tds_results = await self._graph.execute_read(
+            "MATCH (:Part {sku: $sku})-[:HAS_TDS]->(t:TechnicalDataSheet) RETURN t {.*} AS props",
+            {"sku": sku},
+        )
+        sds_results = await self._graph.execute_read(
+            "MATCH (:Part {sku: $sku})-[:HAS_SDS]->(s:SafetyDataSheet) RETURN s {.*} AS props",
+            {"sku": sku},
+        )
+
+        tds_props = tds_results[0]["props"] if tds_results else {}
+        sds_props = sds_results[0]["props"] if sds_results else {}
+
+        # Separate metadata from extracted fields
+        tds_meta_keys = {"product_sku", "revision_date", "pdf_url"}
+        sds_meta_keys = {"product_sku", "revision_date", "pdf_url", "cas_numbers"}
+
+        tds_fields = {k: v for k, v in tds_props.items() if k not in tds_meta_keys}
+        sds_fields = {k: v for k, v in sds_props.items() if k not in sds_meta_keys}
+
+        # Look up locally stored documents from PostgreSQL
+        documents = []
+        tds_download_url = None
+        sds_download_url = None
+        if self._pool:
+            try:
+                async with self._pool.acquire() as conn:
+                    # Find product by SKU to get its UUID
+                    product_row = await conn.fetchrow(
+                        "SELECT id FROM products WHERE sku = $1", sku,
+                    )
+                    if product_row:
+                        product_uuid = product_row["id"]
+                        doc_rows = await conn.fetch(
+                            """SELECT id, doc_type, file_name, file_size_bytes,
+                                      is_current, created_at, source_url
+                               FROM documents
+                               WHERE product_id = $1
+                               ORDER BY doc_type, created_at DESC""",
+                            product_uuid,
+                        )
+                        for row in doc_rows:
+                            doc = dict(row)
+                            doc["id"] = str(doc["id"])
+                            doc["download_url"] = f"/api/v1/documents/{doc['id']}/download"
+                            documents.append(doc)
+                            # Set the first current doc as the download URL
+                            if row["is_current"] and row["doc_type"] == "TDS" and not tds_download_url:
+                                tds_download_url = doc["download_url"]
+                            elif row["is_current"] and row["doc_type"] == "SDS" and not sds_download_url:
+                                sds_download_url = doc["download_url"]
+            except Exception as exc:
+                logger.warning("Failed to look up documents for %s: %s", sku, exc)
+
+        return {
+            "sku": sku,
+            "tds": {
+                "fields": tds_fields,
+                "pdf_url": tds_download_url or tds_props.get("pdf_url"),
+                "source_url": tds_props.get("pdf_url"),
+                "revision_date": tds_props.get("revision_date"),
+            },
+            "sds": {
+                "fields": sds_fields,
+                "pdf_url": sds_download_url or sds_props.get("pdf_url"),
+                "source_url": sds_props.get("pdf_url"),
+                "revision_date": sds_props.get("revision_date"),
+                "cas_numbers": sds_props.get("cas_numbers", []),
+            },
+            "documents": documents,
+        }
+
     async def get_product(self, product_id: str) -> dict | None:
         """Get a single product with manufacturer, product line, industries, and doc URLs."""
         query = """
@@ -309,51 +411,3 @@ class KnowledgeBaseService:
                         product["sds_url"] = doc["source_url"]
 
         return product
-
-    async def get_filters(self) -> dict:
-        """Return available filter values for the product catalog."""
-        mfr_results = await self._graph.execute_read(
-            "MATCH (m:Manufacturer) RETURN m.name AS name ORDER BY m.name", {}
-        )
-        ind_results = await self._graph.execute_read(
-            "MATCH (i:Industry) RETURN i.name AS name ORDER BY i.name", {}
-        )
-        return {
-            "manufacturers": [r["name"] for r in mfr_results],
-            "industries": [r["name"] for r in ind_results],
-        }
-
-    async def get_product_extraction(self, sku: str) -> dict:
-        """Return full TDS + SDS extracted fields for a product from Neo4j."""
-        tds_results = await self._graph.execute_read(
-            "MATCH (:Part {sku: $sku})-[:HAS_TDS]->(t:TechnicalDataSheet) RETURN t {.*} AS props",
-            {"sku": sku},
-        )
-        sds_results = await self._graph.execute_read(
-            "MATCH (:Part {sku: $sku})-[:HAS_SDS]->(s:SafetyDataSheet) RETURN s {.*} AS props",
-            {"sku": sku},
-        )
-
-        tds_props = tds_results[0]["props"] if tds_results else {}
-        sds_props = sds_results[0]["props"] if sds_results else {}
-
-        tds_meta_keys = {"product_sku", "revision_date", "pdf_url"}
-        sds_meta_keys = {"product_sku", "revision_date", "pdf_url", "cas_numbers"}
-
-        tds_fields = {k: v for k, v in tds_props.items() if k not in tds_meta_keys}
-        sds_fields = {k: v for k, v in sds_props.items() if k not in sds_meta_keys}
-
-        return {
-            "sku": sku,
-            "tds": {
-                "fields": tds_fields,
-                "pdf_url": tds_props.get("pdf_url"),
-                "revision_date": tds_props.get("revision_date"),
-            },
-            "sds": {
-                "fields": sds_fields,
-                "pdf_url": sds_props.get("pdf_url"),
-                "revision_date": sds_props.get("revision_date"),
-                "cas_numbers": sds_props.get("cas_numbers", []),
-            },
-        }

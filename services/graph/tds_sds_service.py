@@ -9,6 +9,23 @@ class TDSSDSGraphService:
     def __init__(self, neo4j_client):
         self._neo4j = neo4j_client
 
+    async def ensure_part(self, sku: str, name: str, manufacturer: str = "",
+                          description: str = "") -> list:
+        """Create or update a Part node with manufacturer edge."""
+        cypher = """
+        MERGE (p:Part {sku: $sku})
+        SET p.name = $name, p.description = $desc
+        WITH p
+        FOREACH (_ IN CASE WHEN $mfr <> '' THEN [1] ELSE [] END |
+            MERGE (m:Manufacturer {name: $mfr})
+            MERGE (p)-[:MANUFACTURED_BY]->(m)
+        )
+        RETURN p.sku AS sku
+        """
+        return await self._neo4j.execute_write(
+            cypher, {"sku": sku, "name": name, "mfr": manufacturer, "desc": description},
+        )
+
     async def create_tds(self, product_sku: str, fields: dict) -> list:
         """Create or update a TechnicalDataSheet node linked to a Part."""
         revision_date = fields.pop("revision_date", "unknown")
@@ -29,6 +46,10 @@ class TDSSDSGraphService:
     async def create_sds(self, product_sku: str, fields: dict) -> list:
         """Create or update a SafetyDataSheet node linked to a Part."""
         cas_numbers = fields.pop("cas_numbers", [])
+        # Ensure cas_numbers is a flat list of strings (not dicts)
+        if cas_numbers and isinstance(cas_numbers[0], dict):
+            cas_numbers = [c.get("cas_number", str(c)) for c in cas_numbers]
+        cas_numbers = [str(c) for c in cas_numbers if c]
         pdf_url = fields.pop("pdf_url", None)
         cypher = """
         MATCH (p:Part {sku: $sku})

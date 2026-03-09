@@ -162,6 +162,81 @@ class TestClassifyMessage:
         assert "request_quote" in result["intents"]
 
 
+class TestBatchProcess:
+    @pytest.mark.asyncio
+    async def test_batch_process_success(self, setup_services):
+        conn = setup_services["conn"]
+        conn.fetch.return_value = [
+            {"id": "msg-1", "body": "Need a quote", "intents": '[{"intent": "request_quote", "confidence": 0.9}]', "customer_account_id": None},
+            {"id": "msg-2", "body": "Order status", "intents": '[{"intent": "order_status", "confidence": 0.8}]', "customer_account_id": "acct-1"},
+        ]
+        conn.execute.return_value = "UPDATE 1"
+
+        response_engine = setup_services["response_engine"]
+        response_engine.batch_process_inbox.return_value = [
+            {"response_text": "Here is your quote...", "confidence": 0.85, "attachments": [], "metadata": {}},
+            {"response_text": "Your order is in transit.", "confidence": 0.9, "attachments": [], "metadata": {}},
+        ]
+
+        from routes.inbox import batch_process_messages
+        result = await batch_process_messages(status="classified", limit=50)
+        assert result["processed"] == 2
+        assert result["drafts_generated"] == 2
+        assert result["errors"] == 0
+        response_engine.batch_process_inbox.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_batch_process_partial_errors(self, setup_services):
+        conn = setup_services["conn"]
+        conn.fetch.return_value = [
+            {"id": "msg-1", "body": "Need a quote", "intents": '[{"intent": "request_quote", "confidence": 0.9}]', "customer_account_id": None},
+        ]
+        conn.execute.return_value = "UPDATE 1"
+
+        response_engine = setup_services["response_engine"]
+        response_engine.batch_process_inbox.return_value = [
+            {"response_text": "", "confidence": 0.0, "attachments": [], "metadata": {"error": "LLM failed"}},
+        ]
+
+        from routes.inbox import batch_process_messages
+        result = await batch_process_messages(status="classified", limit=50)
+        assert result["processed"] == 1
+        assert result["drafts_generated"] == 0
+        assert result["errors"] == 1
+
+    @pytest.mark.asyncio
+    async def test_batch_process_no_messages(self, setup_services):
+        conn = setup_services["conn"]
+        conn.fetch.return_value = []
+
+        from routes.inbox import batch_process_messages
+        result = await batch_process_messages(status="classified", limit=50)
+        assert result["processed"] == 0
+        assert result["drafts_generated"] == 0
+        assert result["errors"] == 0
+
+    @pytest.mark.asyncio
+    async def test_batch_process_engine_unavailable(self, setup_services):
+        set_inbox_services(
+            db_manager=setup_services["db"],
+            classifier=setup_services["classifier"],
+            response_engine=None,
+        )
+        from routes.inbox import batch_process_messages
+        with pytest.raises(Exception) as exc_info:
+            await batch_process_messages()
+        assert exc_info.value.status_code == 503
+        assert "Response engine" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_batch_process_db_unavailable(self, setup_services):
+        set_inbox_services(db_manager=None, classifier=None, response_engine=None)
+        from routes.inbox import batch_process_messages
+        with pytest.raises(Exception) as exc_info:
+            await batch_process_messages()
+        assert exc_info.value.status_code == 503
+
+
 class TestMessageStats:
     @pytest.mark.asyncio
     async def test_stats(self, setup_services):

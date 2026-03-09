@@ -15,11 +15,14 @@ def setup_services():
     mock_svc = MagicMock()
     mock_svc.list_products = AsyncMock(return_value={
         "items": [
-            {"sku": "CP-001", "name": "Epikote 828", "cas_number": "25068-38-6"},
-            {"sku": "CP-002", "name": "Silquest A-187", "cas_number": "2530-83-8"},
+            {"sku": "CP-001", "name": "Epikote 828", "cas_number": "25068-38-6",
+             "manufacturer": "Hexion", "industries": ["Adhesives"], "has_tds": True, "has_sds": False},
+            {"sku": "CP-002", "name": "Silquest A-187", "cas_number": "2530-83-8",
+             "manufacturer": "Momentive", "industries": [], "has_tds": False, "has_sds": False},
         ],
         "page": 1,
         "page_size": 25,
+        "total": 2,
     })
     mock_svc.get_product = AsyncMock(return_value={
         "sku": "CP-001",
@@ -36,6 +39,15 @@ def setup_services():
     })
     mock_svc.get_graph_visualization = AsyncMock(return_value={
         "nodes": [], "edges": [],
+    })
+    mock_svc.get_filters = AsyncMock(return_value={
+        "manufacturers": ["Dow", "BASF"],
+        "industries": ["Adhesives", "Coatings"],
+    })
+    mock_svc.get_product_extraction = AsyncMock(return_value={
+        "sku": "CP-001",
+        "tds": {"fields": {"appearance": {"value": "Clear", "confidence": 0.9}}, "pdf_url": None, "revision_date": None},
+        "sds": {"fields": {}, "pdf_url": None, "revision_date": None, "cas_numbers": []},
     })
 
     mock_scraper = MagicMock()
@@ -82,6 +94,18 @@ class TestListProducts:
         setup_services["svc"].list_products.assert_called_once_with(
             page=1, page_size=10, search="epoxy",
             manufacturer=None, industry=None, has_tds=None, has_sds=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_products_with_filters(self, setup_services):
+        from routes.knowledge_base import list_products
+        await list_products(
+            page=1, page_size=25, search=None,
+            manufacturer="Dow", industry="Adhesives", has_tds=True, has_sds=None,
+        )
+        setup_services["svc"].list_products.assert_called_once_with(
+            page=1, page_size=25, search=None,
+            manufacturer="Dow", industry="Adhesives", has_tds=True, has_sds=None,
         )
 
     @pytest.mark.asyncio
@@ -269,3 +293,45 @@ class TestGraphVisualization:
         setup_services["svc"].get_graph_visualization.assert_called_once_with(
             industry="Adhesives", manufacturer=None, limit=100,
         )
+
+
+# ── Filters ──
+
+
+class TestGetFilters:
+    @pytest.mark.asyncio
+    async def test_get_filters_returns_data(self, setup_services):
+        from routes.knowledge_base import get_filters
+        result = await get_filters()
+        assert "Dow" in result["manufacturers"]
+        assert "Adhesives" in result["industries"]
+        setup_services["svc"].get_filters.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_filters_service_unavailable(self):
+        set_kb_service(None)
+        from routes.knowledge_base import get_filters
+        with pytest.raises(Exception) as exc_info:
+            await get_filters()
+        assert exc_info.value.status_code == 503
+
+
+# ── Product Extraction ──
+
+
+class TestGetProductExtraction:
+    @pytest.mark.asyncio
+    async def test_get_extraction_returns_data(self, setup_services):
+        from routes.knowledge_base import get_product_extraction
+        result = await get_product_extraction("CP-001")
+        assert result["sku"] == "CP-001"
+        assert result["tds"]["fields"]["appearance"]["confidence"] == 0.9
+        setup_services["svc"].get_product_extraction.assert_called_once_with("CP-001")
+
+    @pytest.mark.asyncio
+    async def test_get_extraction_service_unavailable(self):
+        set_kb_service(None)
+        from routes.knowledge_base import get_product_extraction
+        with pytest.raises(Exception) as exc_info:
+            await get_product_extraction("CP-001")
+        assert exc_info.value.status_code == 503

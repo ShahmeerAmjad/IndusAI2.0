@@ -12,18 +12,17 @@ import {
   ArrowRight,
   ChevronDown,
 } from "lucide-react";
+import ProblemSection from "@/components/demo/ProblemSection";
+import ArchitectureFlow from "@/components/demo/ArchitectureFlow";
+import LiveStats from "@/components/demo/LiveStats";
+import KnowledgeGraphDemo from "@/components/demo/KnowledgeGraphDemo";
+import LiveFeatures from "@/components/demo/LiveFeatures";
+import ROIComparison from "@/components/demo/ROIComparison";
+import Roadmap from "@/components/demo/Roadmap";
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
 /* ------------------------------------------------------------------ */
-
-const stats = [
-  { value: "100+", label: "API Endpoints" },
-  { value: "227", label: "Tests Passing" },
-  { value: "5-Stage", label: "AI Pipeline" },
-  { value: "16", label: "App Pages" },
-  { value: "Full", label: "O2C + P2P" },
-];
 
 const features = [
   {
@@ -146,12 +145,36 @@ export default function Landing() {
           </Link>
 
           {/* Center links */}
-          <div className="hidden items-center gap-8 md:flex">
+          <div className="hidden items-center gap-6 md:flex">
             <button
-              onClick={() => scrollTo("features")}
+              onClick={() => scrollTo("problem")}
               className="text-sm font-medium text-slate-600 transition hover:text-industrial-700"
             >
-              Features
+              Problem
+            </button>
+            <button
+              onClick={() => scrollTo("architecture")}
+              className="text-sm font-medium text-slate-600 transition hover:text-industrial-700"
+            >
+              How It Works
+            </button>
+            <button
+              onClick={() => scrollTo("live-stats")}
+              className="text-sm font-medium text-slate-600 transition hover:text-industrial-700"
+            >
+              What's Built
+            </button>
+            <button
+              onClick={() => scrollTo("knowledge-graph")}
+              className="text-sm font-medium text-slate-600 transition hover:text-industrial-700"
+            >
+              Knowledge Graph
+            </button>
+            <button
+              onClick={() => scrollTo("roi")}
+              className="text-sm font-medium text-slate-600 transition hover:text-industrial-700"
+            >
+              ROI
             </button>
             <button
               onClick={() => scrollTo("tech")}
@@ -201,7 +224,7 @@ export default function Landing() {
               className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-slate-300 backdrop-blur-sm"
             >
               <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse-slow" />
-              Platform Live &mdash; 16 Pages Deployed
+              Platform Live &mdash; All Systems Operational
             </motion.div>
 
             {/* Heading */}
@@ -209,9 +232,9 @@ export default function Landing() {
               variants={fadeIn}
               className="font-montserrat text-5xl font-bold leading-tight tracking-tight text-white lg:text-6xl"
             >
-              The Operating System
+              Supplier Sales &amp; Support
               <br />
-              for MRO Distribution
+              Automation
             </motion.h1>
 
             {/* Subheading */}
@@ -219,8 +242,8 @@ export default function Landing() {
               variants={fadeIn}
               className="max-w-2xl text-lg leading-relaxed text-slate-300"
             >
-              AI-powered sourcing, order-to-cash, and supply chain intelligence
-              &mdash; built for industrial distributors
+              AI that triages, classifies, and drafts responses to millions of inbound
+              emails &mdash; so your team handles exceptions, not routine.
             </motion.p>
 
             {/* CTA buttons */}
@@ -233,10 +256,10 @@ export default function Landing() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <button
-                onClick={() => scrollTo("features")}
+                onClick={() => scrollTo("problem")}
                 className="inline-flex items-center gap-2 rounded-lg border border-white/30 px-8 py-3 font-semibold text-white transition hover:bg-white/10"
               >
-                Explore Features
+                See the Demo
               </button>
             </motion.div>
           </motion.div>
@@ -249,7 +272,7 @@ export default function Landing() {
             className="absolute bottom-8 left-1/2 -translate-x-1/2"
           >
             <button
-              onClick={() => scrollTo("stats")}
+              onClick={() => scrollTo("problem")}
               className="flex flex-col items-center gap-1 text-slate-400 transition hover:text-white"
               aria-label="Scroll down"
             >
@@ -260,25 +283,23 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Stats Bar ────────────────────────────────────────────── */}
-      <section id="stats" className="border-y border-slate-200 bg-slate-50">
-        <div className="mx-auto max-w-6xl px-6 py-12">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.4 }}
-            variants={staggerContainer}
-            className="grid grid-cols-2 gap-8 text-center md:grid-cols-5"
-          >
-            {stats.map((s, i) => (
-              <motion.div key={s.label} custom={i} variants={fadeUp}>
-                <p className="text-3xl font-bold text-industrial-800">{s.value}</p>
-                <p className="mt-1 text-sm text-slate-500">{s.label}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
+      {/* ── Demo Showcase Sections ─────────────────────────────── */}
+
+      <div id="problem">
+        <ProblemSection />
+      </div>
+
+      <div id="architecture">
+        <ArchitectureFlow />
+      </div>
+
+      <div id="live-stats">
+        <LiveStats />
+      </div>
+
+      <div id="knowledge-graph">
+        <KnowledgeGraphDemo />
+      </div>
 
       {/* ── Feature Cards ────────────────────────────────────────── */}
       <section id="features" className="bg-white py-20">
@@ -290,9 +311,9 @@ export default function Landing() {
             variants={fadeIn}
             className="mb-14 text-center"
           >
-            <h2 className="text-3xl font-bold text-slate-900">What We've Built</h2>
+            <h2 className="text-3xl font-bold text-slate-900">Platform Capabilities</h2>
             <p className="mt-3 text-slate-500">
-              A complete platform for MRO distribution intelligence
+              A complete platform for industrial distribution intelligence
             </p>
           </motion.div>
 
@@ -337,6 +358,12 @@ export default function Landing() {
         </div>
       </section>
 
+      <LiveFeatures />
+
+      <div id="roi">
+        <ROIComparison />
+      </div>
+
       {/* ── Tech Stack Strip ─────────────────────────────────────── */}
       <section id="tech" className="border-y border-slate-200 bg-slate-50 py-16">
         <div className="mx-auto max-w-5xl px-6">
@@ -373,6 +400,8 @@ export default function Landing() {
           </motion.div>
         </div>
       </section>
+
+      <Roadmap />
 
       {/* ── CTA Section ──────────────────────────────────────────── */}
       <section className="bg-gradient-to-br from-slate-900 via-slate-800 to-industrial-900 py-24">

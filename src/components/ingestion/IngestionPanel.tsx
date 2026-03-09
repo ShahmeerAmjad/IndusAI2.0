@@ -6,22 +6,24 @@ import {
   FileText, Download, Cpu, Globe
 } from "lucide-react";
 
+const STORAGE_KEY = "indusai_active_job";
+
 const INDUSTRY_OPTIONS = [
   "Adhesives", "Coatings", "Pharma", "Personal Care", "Water Treatment",
   "Food & Beverage", "Plastics", "Energy", "Agriculture", "Construction",
 ];
 
 const INDUSTRY_URLS: Record<string, string> = {
-  "Adhesives": "https://www.chempoint.com/en-us/products/industry/adhesives-and-sealants",
-  "Coatings": "https://www.chempoint.com/en-us/products/industry/paints-and-coatings",
-  "Pharma": "https://www.chempoint.com/en-us/products/industry/pharmaceutical",
-  "Personal Care": "https://www.chempoint.com/en-us/products/industry/personal-care",
-  "Water Treatment": "https://www.chempoint.com/en-us/products/industry/water-treatment",
-  "Food & Beverage": "https://www.chempoint.com/en-us/products/industry/food-and-beverage",
-  "Plastics": "https://www.chempoint.com/en-us/products/industry/plastics-and-rubber",
-  "Energy": "https://www.chempoint.com/en-us/products/industry/energy",
-  "Agriculture": "https://www.chempoint.com/en-us/products/industry/agriculture",
-  "Construction": "https://www.chempoint.com/en-us/products/industry/building-and-construction",
+  "Adhesives": "https://www.chempoint.com/industries/adhesives/all",
+  "Coatings": "https://www.chempoint.com/industries/coatings/all",
+  "Pharma": "https://www.chempoint.com/industries/pharmaceutical/all",
+  "Personal Care": "https://www.chempoint.com/industries/personal-care/all",
+  "Water Treatment": "https://www.chempoint.com/industries/water-treatment/all",
+  "Food & Beverage": "https://www.chempoint.com/industries/food-beverage/all",
+  "Plastics": "https://www.chempoint.com/industries/plastics-rubber/all",
+  "Energy": "https://www.chempoint.com/industries/energy/all",
+  "Agriculture": "https://www.chempoint.com/industries/agriculture/all",
+  "Construction": "https://www.chempoint.com/industries/building-construction/all",
 };
 
 const STAGE_ICONS: Record<string, typeof Play> = {
@@ -41,19 +43,46 @@ export default function IngestionPanel() {
   const [mode, setMode] = useState<"single" | "batch">("batch");
   const [url, setUrl] = useState("");
   const [selectedIndustries, setSelectedIndustries] = useState<string[]>(["Adhesives", "Coatings"]);
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [maxProducts, setMaxProducts] = useState(20);
+  const [singleMaxProducts, setSingleMaxProducts] = useState(10);
+  const [jobId, setJobId] = useState<string | null>(
+    () => sessionStorage.getItem(STORAGE_KEY)
+  );
   const [events, setEvents] = useState<IngestionEvent[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
+  // Persist jobId to sessionStorage
+  useEffect(() => {
+    if (jobId) {
+      sessionStorage.setItem(STORAGE_KEY, jobId);
+    }
+  }, [jobId]);
+
+  // Poll job status (always when there's a jobId — serves as both
+  // primary data source and WS fallback)
   const { data: job } = useQuery({
     queryKey: ["ingestion-job", jobId],
     queryFn: () => api.getIngestionJob(jobId!),
-    enabled: !!jobId && !wsConnected,
-    refetchInterval: jobId ? 2000 : false,
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (!status) return 2000;
+      if (status === "running") return 2000;
+      return false; // stop polling once done/failed/cancelled
+    },
   });
 
+  // Sync polled events into local state (always — WS may miss events
+  // if the user navigated away and came back)
+  useEffect(() => {
+    if (job?.events && job.events.length > events.length) {
+      setEvents(job.events);
+    }
+  }, [job]);
+
+  // WebSocket for real-time updates
   useEffect(() => {
     if (!jobId) return;
     const wsUrl = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/v1/ingestion/ws/${jobId}`;
@@ -71,14 +100,23 @@ export default function IngestionPanel() {
     return () => ws.close();
   }, [jobId]);
 
+  // Auto-scroll log
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [events]);
 
+  // Clear stored job when it finishes
+  const jobStatus = job?.status;
+  useEffect(() => {
+    if (jobStatus && jobStatus !== "running") {
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+  }, [jobStatus]);
+
   const startSingle = useMutation({
-    mutationFn: () => api.startIngestion(url),
+    mutationFn: () => api.startIngestion(url, singleMaxProducts),
     onSuccess: (data) => {
       setJobId(data.job_id);
       setEvents([]);
@@ -90,7 +128,7 @@ export default function IngestionPanel() {
       const urls = selectedIndustries
         .filter((i) => INDUSTRY_URLS[i])
         .map((i) => INDUSTRY_URLS[i]);
-      return api.startBatchIngestion(urls);
+      return api.startBatchIngestion(urls, maxProducts);
     },
     onSuccess: (data) => {
       setJobId(data.job_id);
@@ -105,11 +143,19 @@ export default function IngestionPanel() {
     },
   });
 
+  const dismissJob = () => {
+    setJobId(null);
+    setEvents([]);
+    sessionStorage.removeItem(STORAGE_KEY);
+  };
+
   const isRunning = job?.status === "running" || startSingle.isPending || startBatch.isPending;
-  const isCancelled = events.some((e) => e.stage === "cancelled");
-  const isDone = events.some((e) => e.stage === "done");
+  const isCancelled = events.some((e) => e.stage === "cancelled") || job?.status === "cancelled";
+  const isDone = events.some((e) => e.stage === "done") || job?.status === "completed" || job?.status === "done";
+  const isFailed = job?.status === "failed";
+  const isFinished = isDone || isCancelled || isFailed;
   const lastEvent = events[events.length - 1];
-  const productCount = events.filter((e) => e.stage === "building_graph").length;
+  const productCount = events.filter((e) => e.stage === "processing").length;
   const errorCount = events.filter((e) => e.stage === "error").length;
 
   const toggleIndustry = (ind: string) => {
@@ -135,15 +181,29 @@ export default function IngestionPanel() {
       </div>
 
       {mode === "single" ? (
-        <div className="flex gap-2">
-          <input value={url} onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://chempoint.com/products/..."
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
-          <button onClick={() => startSingle.mutate()} disabled={!url || isRunning}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-            {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-            Ingest
-          </button>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input value={url} onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://chempoint.com/products/..."
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+            <button onClick={() => startSingle.mutate()} disabled={!url || isRunning}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+              {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+              Ingest
+            </button>
+          </div>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+            Max products
+            <input
+              type="number"
+              min={1}
+              max={500}
+              value={singleMaxProducts}
+              onChange={(e) => setSingleMaxProducts(Number(e.target.value))}
+              className="w-16 rounded border border-slate-300 px-2 py-1 text-sm text-slate-700 focus:border-blue-400 focus:outline-none"
+            />
+            <span className="text-slate-400">(0 = unlimited)</span>
+          </label>
         </div>
       ) : (
         <div className="space-y-3">
@@ -159,12 +219,25 @@ export default function IngestionPanel() {
               </button>
             ))}
           </div>
-          <button onClick={() => startBatch.mutate()}
-            disabled={selectedIndustries.length === 0 || isRunning}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-            {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-            Seed {selectedIndustries.length} Industries
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => startBatch.mutate()}
+              disabled={selectedIndustries.length === 0 || isRunning}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+              {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+              Seed {selectedIndustries.length} Industries
+            </button>
+            <label className="flex items-center gap-1.5 text-xs text-slate-500">
+              Max products
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={maxProducts}
+                onChange={(e) => setMaxProducts(Number(e.target.value))}
+                className="w-16 rounded border border-slate-300 px-2 py-1 text-sm text-slate-700 focus:border-blue-400 focus:outline-none"
+              />
+            </label>
+          </div>
         </div>
       )}
 
@@ -184,7 +257,7 @@ export default function IngestionPanel() {
             </span>
           </div>
 
-          {lastEvent && !isDone && (
+          {lastEvent && !isFinished && (
             <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700">
               <StageIcon stage={lastEvent.stage} />
               <span className="font-medium">{lastEvent.product || lastEvent.detail || lastEvent.stage}</span>
@@ -203,7 +276,7 @@ export default function IngestionPanel() {
             </div>
           )}
 
-          {jobId && !isDone && !isCancelled && (
+          {jobId && !isFinished && (
             <button
               onClick={() => cancelJob.mutate()}
               className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
@@ -224,11 +297,11 @@ export default function IngestionPanel() {
             ))}
           </div>
 
-          {isDone && lastEvent?.result && (
+          {isDone && (job?.result || lastEvent?.result) && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-3">
               <p className="mb-2 text-sm font-semibold text-green-800">Ingestion Complete</p>
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                {Object.entries(lastEvent.result).map(([k, v]) => (
+              <div className="grid grid-cols-3 gap-2 text-center text-xs sm:grid-cols-6">
+                {Object.entries(job?.result || lastEvent?.result || {}).map(([k, v]) => (
                   <div key={k}>
                     <p className="text-lg font-bold text-green-700">{v as number}</p>
                     <p className="text-green-600">{k.replace(/_/g, " ")}</p>
@@ -237,6 +310,11 @@ export default function IngestionPanel() {
               </div>
             </div>
           )}
+
+          <button onClick={dismissJob}
+            className="px-3 py-1 text-xs text-slate-500 hover:text-slate-700">
+            {isFinished ? "Dismiss & start new" : "Dismiss (job continues in background)"}
+          </button>
         </div>
       )}
     </div>

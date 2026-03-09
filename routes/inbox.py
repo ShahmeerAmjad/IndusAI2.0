@@ -255,6 +255,81 @@ async def submit_feedback(message_id: str, body: FeedbackRequest):
     return {"message_id": message_id, "feedback_recorded": True}
 
 
+@router.post("/messages/batch-process")
+async def batch_process_messages(
+    status: str = Query("classified"),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Batch-generate AI drafts for messages matching a status filter."""
+    if not _db or not _db.pool:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    if not _response_engine:
+        raise HTTPException(status_code=503, detail="Response engine unavailable")
+
+    from services.ai.models import IntentResult, IntentType, MultiIntentResult, EntityResult
+
+    async with _db.pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT id, body, intents, customer_account_id
+               FROM inbound_messages
+               WHERE status = $1
+               ORDER BY created_at ASC
+               LIMIT $2""",
+            status, limit,
+        )
+
+    # Build email dicts expected by batch_process_inbox
+    emails = []
+    for row in rows:
+        intents_raw = row.get("intents") or "[]"
+        try:
+            intents_list = json.loads(intents_raw) if isinstance(intents_raw, str) else intents_raw
+        except (json.JSONDecodeError, TypeError):
+            intents_list = []
+
+        intent_results = []
+        for item in intents_list:
+            try:
+                intent_results.append(IntentResult(
+                    intent=IntentType(item["intent"]),
+                    confidence=item.get("confidence", 0.5),
+                    text_span=item.get("text_span"),
+                ))
+            except (KeyError, ValueError):
+                continue
+
+        classification = MultiIntentResult(intents=intent_results, entities=EntityResult())
+        emails.append({
+            "id": row["id"],
+            "body": row["body"],
+            "classification": classification,
+            "customer_account": row.get("customer_account_id"),
+        })
+
+    if not emails:
+        return {"processed": 0, "drafts_generated": 0, "errors": 0}
+
+    results = await _response_engine.batch_process_inbox(emails)
+
+    drafts_generated = 0
+    errors = 0
+    async with _db.pool.acquire() as conn:
+        for email, draft in zip(emails, results):
+            if draft.get("response_text"):
+                await conn.execute(
+                    """UPDATE inbound_messages
+                       SET ai_draft_response = $1, ai_confidence = $2,
+                           status = 'draft_ready'
+                       WHERE id = $3""",
+                    draft["response_text"], draft.get("confidence"), email["id"],
+                )
+                drafts_generated += 1
+            else:
+                errors += 1
+
+    return {"processed": len(results), "drafts_generated": drafts_generated, "errors": errors}
+
+
 @router.post("/messages/simulate")
 async def simulate_inbound(req: SimulateRequest):
     """Simulate an inbound message — classify, draft, and store."""

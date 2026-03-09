@@ -44,6 +44,10 @@ function patch<T>(path: string, body?: unknown) {
   return request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined });
 }
 
+function put<T>(path: string, body: unknown) {
+  return request<T>(path, { method: "PUT", body: JSON.stringify(body) });
+}
+
 // ---------- Types ----------
 
 export interface PaginatedResponse<T> {
@@ -392,25 +396,29 @@ export interface IngestionEvent {
 
 export interface IngestionJob {
   job_id: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "done" | "failed" | "cancelled";
   events: IngestionEvent[];
   result?: Record<string, number>;
   error?: string;
 }
 
-export interface GraphVizData {
-  nodes: Array<{
-    id: string;
-    label: string;
-    name: string;
-    color: string;
-    properties: Record<string, unknown>;
-  }>;
-  edges: Array<{
-    source: string;
-    target: string;
-    relationship: string;
-  }>;
+export interface KeyStatus {
+  configured: boolean;
+  preview: string;
+}
+
+export interface KeysResponse {
+  keys: {
+    anthropic_api_key: KeyStatus;
+    firecrawl_api_key: KeyStatus;
+    voyage_api_key: KeyStatus;
+  };
+}
+
+export interface KeysUpdateRequest {
+  anthropic_api_key?: string;
+  firecrawl_api_key?: string;
+  voyage_api_key?: string;
 }
 
 export interface CatalogProduct {
@@ -435,19 +443,48 @@ export interface ExtractionField {
   confidence: number;
 }
 
+export interface DocumentInfo {
+  id: string;
+  doc_type: string;
+  file_name: string;
+  file_size_bytes?: number;
+  is_current?: boolean;
+  download_url: string;
+  source_url?: string;
+  created_at?: string;
+}
+
 export interface ProductExtraction {
   sku: string;
+  documents?: DocumentInfo[];
   tds: {
     fields: Record<string, ExtractionField | string | number | null>;
     pdf_url?: string;
+    source_url?: string;
     revision_date?: string;
   };
   sds: {
     fields: Record<string, ExtractionField | string | number | null>;
     pdf_url?: string;
+    source_url?: string;
     revision_date?: string;
     cas_numbers?: string[];
   };
+}
+
+export interface GraphVizData {
+  nodes: Array<{
+    id: string;
+    label: string;
+    name: string;
+    color: string;
+    properties: Record<string, unknown>;
+  }>;
+  edges: Array<{
+    source: string;
+    target: string;
+    relationship: string;
+  }>;
 }
 
 // ---------- API Functions ----------
@@ -582,6 +619,7 @@ export const api = {
   getInboxStats: () => get<InboxStats>("/inbox/messages/stats"),
 
   // Documents
+  getDocumentCount: () => get<{ total: number; tds: number; sds: number }>("/documents/count"),
   getDocumentsForProduct: (productId: string) => get<DocumentMeta[]>(`/documents/product/${productId}`),
   searchDocuments: (q: string, docType?: string) =>
     get<DocumentMeta[]>(`/documents/search?q=${encodeURIComponent(q)}${docType ? `&doc_type=${docType}` : ""}`),
@@ -593,8 +631,8 @@ export const api = {
   lookupCustomerByEmail: (email: string) => get<CustomerAccount>(`/customer-accounts/lookup?email=${encodeURIComponent(email)}`),
 
   // Ingestion
-  startIngestion: (url: string) =>
-    post<{ job_id: string; status: string }>("/ingestion/start", { url }),
+  startIngestion: (url: string, maxProducts = 0) =>
+    post<{ job_id: string; status: string }>("/ingestion/start", { url, max_products: maxProducts }),
   startBatchIngestion: (industryUrls: string[], maxProducts = 50) =>
     post<{ job_id: string; status: string }>("/ingestion/start-batch", {
       industry_urls: industryUrls,
@@ -603,15 +641,6 @@ export const api = {
   getIngestionJob: (jobId: string) => get<IngestionJob>(`/ingestion/jobs/${jobId}`),
   cancelIngestion: (jobId: string) =>
     post<{ job_id: string; status: string }>(`/ingestion/jobs/${jobId}/cancel`, {}),
-
-  // Graph Visualization
-  getGraphViz: (industry?: string, manufacturer?: string) => {
-    const params = new URLSearchParams();
-    if (industry) params.set("industry", industry);
-    if (manufacturer) params.set("manufacturer", manufacturer);
-    const qs = params.toString();
-    return get<GraphVizData>(`/knowledge-base/graph-viz${qs ? `?${qs}` : ""}`);
-  },
 
   // Product Catalog (enhanced)
   getCatalogProducts: (params: {
@@ -637,4 +666,17 @@ export const api = {
 
   getProductExtraction: (sku: string) =>
     get<ProductExtraction>(`/knowledge-base/products/${encodeURIComponent(sku)}/extraction`),
+
+  // Graph Visualization
+  getGraphViz: (industry?: string, manufacturer?: string) => {
+    const params = new URLSearchParams();
+    if (industry) params.set("industry", industry);
+    if (manufacturer) params.set("manufacturer", manufacturer);
+    const qs = params.toString();
+    return get<GraphVizData>(`/knowledge-base/graph-viz${qs ? `?${qs}` : ""}`);
+  },
+
+  // Settings
+  getKeys: () => get<KeysResponse>("/settings/keys"),
+  updateKeys: (data: KeysUpdateRequest) => put<{ updated: string[]; message: string }>("/settings/keys", data),
 };

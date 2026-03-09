@@ -42,3 +42,6 @@ _extracted/
 
 # Git worktrees
 .worktrees/
+
+# Local data (scraped PDFs)
+data/

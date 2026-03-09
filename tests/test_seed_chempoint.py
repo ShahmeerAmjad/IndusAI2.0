@@ -29,6 +29,7 @@ async def test_seed_pipeline_creates_product_and_tds():
     })
 
     mock_graph = MagicMock()
+    mock_graph.ensure_part = AsyncMock()
     mock_graph.create_tds = AsyncMock()
     mock_graph.create_sds = AsyncMock()
     mock_graph.link_product_to_industry = AsyncMock()
@@ -46,7 +47,7 @@ async def test_seed_pipeline_creates_product_and_tds():
         graph_service=mock_graph,
         db_manager=mock_db,
     )
-    result = await pipeline.seed_from_url("https://chempoint.com/products/polyox-wsr301")
+    result = await pipeline.seed_from_url("https://chempoint.com/products/dow/polyox/resins/polyox-wsr301")
     assert result["products_created"] >= 1
     mock_graph.create_tds.assert_called_once()
     mock_graph.create_sds.assert_called_once()
@@ -71,6 +72,7 @@ def _make_pipeline(scraper_return=None, doc_fields=None, db_row=None):
         return_value=doc_fields or {"cas_numbers": {"value": ["123"], "confidence": 0.9}})
 
     mock_graph = MagicMock()
+    mock_graph.ensure_part = AsyncMock()
     mock_graph.create_tds = AsyncMock()
     mock_graph.create_sds = AsyncMock()
     mock_graph.link_product_to_industry = AsyncMock()
@@ -264,6 +266,7 @@ async def test_pipeline_with_progress_callback():
     })
 
     mock_graph = MagicMock()
+    mock_graph.ensure_part = AsyncMock()
     mock_graph.create_tds = AsyncMock()
     mock_graph.create_sds = AsyncMock()
     mock_graph.link_product_to_industry = AsyncMock()
@@ -280,7 +283,7 @@ async def test_pipeline_with_progress_callback():
         graph_service=mock_graph, db_manager=mock_db,
     )
     result = await pipeline.seed_from_url(
-        "https://chempoint.com/products/polyox", on_progress=on_progress,
+        "https://chempoint.com/products/dow/polyox/resins/polyox-wsr301", on_progress=on_progress,
     )
     assert result["products_created"] >= 1
     assert len(progress_events) >= 3
@@ -306,6 +309,7 @@ async def test_pipeline_stores_confidence_in_graph():
     })
 
     mock_graph = MagicMock()
+    mock_graph.ensure_part = AsyncMock()
     mock_graph.create_tds = AsyncMock()
     mock_graph.link_product_to_industry = AsyncMock()
     mock_graph.link_product_to_product_line = AsyncMock()
@@ -404,6 +408,96 @@ async def test_tracks_created_vs_updated():
 
     assert stats["products_created"] == 1
     assert stats["products_updated"] == 1
+
+
+@pytest.mark.asyncio
+async def test_seed_from_url_detects_manufacturer_page():
+    """Manufacturer URLs should call scrape_manufacturer_page, not scrape_product_page."""
+    pipeline, mock_scraper, mock_doc, mock_graph, mock_db = _make_pipeline()
+
+    # scrape_manufacturer_page returns product summaries with URLs
+    mock_scraper.scrape_manufacturer_page = AsyncMock(return_value=[
+        {"name": "Elvacite 4067", "url": "https://www.chempoint.com/products/mca/elvacite/copolymers/elvacite-4067"},
+    ])
+    # The recursed product URL goes through scrape_product_page
+    mock_scraper.scrape_product_page = AsyncMock(return_value=[{
+        "name": "Elvacite 4067", "manufacturer": "Mitsubishi",
+        "tds_url": None, "sds_url": None, "industries": ["Coatings"],
+    }])
+
+    stats = await pipeline.seed_from_url(
+        "https://www.chempoint.com/manufacturers/mitsubishi-chemical-america",
+        on_progress=lambda e: None,
+    )
+
+    mock_scraper.scrape_manufacturer_page.assert_called_once()
+    assert stats["products_created"] == 1
+
+
+@pytest.mark.asyncio
+async def test_seed_from_url_detects_product_listing_page():
+    """Product listing URLs (1-3 segments) should use scrape_product_listing."""
+    pipeline, mock_scraper, mock_doc, mock_graph, mock_db = _make_pipeline()
+
+    mock_scraper.scrape_product_listing = AsyncMock(return_value=[
+        {"name": "Elvacite 4067", "url": "https://www.chempoint.com/products/mca/line/sub/elvacite-4067"},
+    ])
+    mock_scraper.scrape_product_page = AsyncMock(return_value=[{
+        "name": "Elvacite 4067", "manufacturer": "Mitsubishi",
+        "tds_url": None, "sds_url": None, "industries": ["Coatings"],
+    }])
+
+    stats = await pipeline.seed_from_url(
+        "https://www.chempoint.com/products/mitsubishi-chemical-america",
+        on_progress=lambda e: None,
+    )
+
+    mock_scraper.scrape_product_listing.assert_called_once()
+    # scrape_product_page should NOT have been called for the listing URL
+    assert stats["products_created"] == 1
+
+
+@pytest.mark.asyncio
+async def test_seed_from_url_product_detail_not_treated_as_listing():
+    """Product detail URLs (4+ segments) should go through scrape_product_page."""
+    pipeline, mock_scraper, mock_doc, mock_graph, mock_db = _make_pipeline()
+
+    mock_scraper.scrape_product_listing = AsyncMock()
+    mock_scraper.scrape_product_page = AsyncMock(return_value=[{
+        "name": "Elvacite 4067", "manufacturer": "Mitsubishi",
+        "tds_url": None, "sds_url": None, "industries": [],
+    }])
+
+    stats = await pipeline.seed_from_url(
+        "https://www.chempoint.com/products/mca/elvacite-specialty/copolymers/elvacite-4067",
+        on_progress=lambda e: None,
+    )
+
+    mock_scraper.scrape_product_listing.assert_not_called()
+    mock_scraper.scrape_product_page.assert_called_once()
+    assert stats["products_created"] == 1
+
+
+@pytest.mark.asyncio
+async def test_seed_from_url_detects_industry_page():
+    """Industry URLs should call scrape_industry_page, not scrape_product_page."""
+    pipeline, mock_scraper, mock_doc, mock_graph, mock_db = _make_pipeline()
+
+    mock_scraper.scrape_industry_page = AsyncMock(return_value=[
+        {"name": "Product X", "url": "https://www.chempoint.com/products/dow/line/sub/product-x"},
+    ])
+    mock_scraper.scrape_product_page = AsyncMock(return_value=[{
+        "name": "Product X", "manufacturer": "Dow",
+        "tds_url": None, "sds_url": None, "industries": ["Adhesives"],
+    }])
+
+    stats = await pipeline.seed_from_url(
+        "https://www.chempoint.com/industries/adhesives",
+        on_progress=lambda e: None,
+    )
+
+    mock_scraper.scrape_industry_page.assert_called_once()
+    assert stats["products_created"] == 1
 
 
 @pytest.mark.asyncio
