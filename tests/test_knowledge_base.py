@@ -86,3 +86,62 @@ async def test_list_products_with_has_tds_filter():
     result = await svc.list_products(page=1, page_size=25, has_tds=True)
     assert result["total"] == 2
     assert all(item["has_tds"] for item in result["items"])
+
+
+# ── Route-level tests ──
+
+
+@pytest.mark.asyncio
+async def test_filters_route():
+    """Test GET /api/v1/knowledge-base/filters returns manufacturers and industries."""
+    from routes.knowledge_base import router, set_kb_service
+    from fastapi import FastAPI
+    from httpx import AsyncClient, ASGITransport
+
+    app = FastAPI()
+    app.include_router(router)
+
+    mock_svc = MagicMock()
+    mock_svc.get_filters = AsyncMock(return_value={
+        "manufacturers": ["Dow", "BASF"],
+        "industries": ["Adhesives"],
+    })
+    set_kb_service(mock_svc)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/v1/knowledge-base/filters")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "Dow" in data["manufacturers"]
+    assert "Adhesives" in data["industries"]
+
+    set_kb_service(None)
+
+
+@pytest.mark.asyncio
+async def test_extraction_route():
+    """Test GET /api/v1/knowledge-base/products/{sku}/extraction."""
+    from routes.knowledge_base import router, set_kb_service
+    from fastapi import FastAPI
+    from httpx import AsyncClient, ASGITransport
+
+    app = FastAPI()
+    app.include_router(router)
+
+    mock_svc = MagicMock()
+    mock_svc.get_product_extraction = AsyncMock(return_value={
+        "sku": "TEST-001",
+        "tds": {"fields": {"appearance": {"value": "Clear", "confidence": 0.9}},
+                "pdf_url": None, "revision_date": None},
+        "sds": {"fields": {}, "pdf_url": None, "revision_date": None, "cas_numbers": []},
+    })
+    set_kb_service(mock_svc)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/v1/knowledge-base/products/TEST-001/extraction")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["sku"] == "TEST-001"
+    assert data["tds"]["fields"]["appearance"]["confidence"] == 0.9
+
+    set_kb_service(None)
