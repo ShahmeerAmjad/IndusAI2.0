@@ -363,6 +363,21 @@ export interface ClassificationFeedback {
   notes?: string;
 }
 
+export interface SimulateMessageRequest {
+  from_address?: string;
+  subject?: string;
+  body: string;
+  channel?: string;
+}
+
+export interface SimulateMessageResponse {
+  message_id: string | null;
+  intents: Array<{ intent: string; confidence: number; text_span: string }>;
+  status: string;
+  ai_draft: string | null;
+  ai_confidence: number | null;
+}
+
 export interface CustomerAccount {
   id: string;
   name: string;
@@ -619,6 +634,8 @@ export const api = {
   submitFeedback: (id: string, feedback: ClassificationFeedback) =>
     post<unknown>(`/inbox/messages/${id}/feedback`, feedback),
   getInboxStats: () => get<InboxStats>("/inbox/messages/stats"),
+  simulateMessage: (data: SimulateMessageRequest) =>
+    post<SimulateMessageResponse>("/inbox/messages/simulate", data),
 
   // Documents
   getDocumentCount: () => get<{ total: number; tds: number; sds: number }>("/documents/count"),

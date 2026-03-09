@@ -145,6 +145,139 @@ SAMPLE_MESSAGES = [
         "ai_draft_response": "Hello,\n\nWe'd be happy to support your research. For academic institutions, we offer research quantities at reduced pricing.\n\n- Product: POLYOX WSR-301\n- Quantity: 100g sample\n- Price: $25.00 (academic rate)\n- Shipping: Standard ground, free for academic orders\n\nI'll also include the TDS and SDS for your records. Please provide your university shipping address and a faculty contact.\n\nBest regards",
         "ai_confidence": 0.88,
     },
+    # ── New emails (13) ─────────────────────────────────────────────
+    # place_order x3
+    {
+        "channel": "email", "from_address": "purchasing@acmemfg.com",
+        "subject": "PO #7890 — 2,000 kg Epoxy Resin ER-500",
+        "body": "Please find attached PO #7890 for 2,000 kg of Epoxy Resin ER-500 at $12.50/kg. Ship to our Houston warehouse, Dock B. Payment terms NET30 per our agreement.",
+        "intents": [{"intent": "place_order", "confidence": 0.96, "text_span": "PO #7890 for 2,000 kg of Epoxy Resin ER-500"}],
+        "status": "classified",
+        "ai_draft_response": None,
+        "ai_confidence": 0.0,
+    },
+    {
+        "channel": "email", "from_address": "ops@westcoastchem.com",
+        "subject": "Urgent order — 10 drums MEK",
+        "body": "We need 10 drums of MEK shipped ASAP to our San Jose plant. Please confirm availability and send a proforma invoice. This is time-sensitive for a customer commitment.",
+        "intents": [{"intent": "place_order", "confidence": 0.93, "text_span": "10 drums of MEK shipped ASAP"}],
+        "status": "classified",
+        "ai_draft_response": None,
+        "ai_confidence": 0.0,
+    },
+    {
+        "channel": "web", "from_address": "jkeller@midwestcoatings.com",
+        "subject": "Order: 50 pails waterborne PU dispersion",
+        "body": "Please process an order for 50 x 5-gal pails of your waterborne polyurethane dispersion WPU-200. Ship to 4500 Industrial Blvd, Chicago IL 60632. PO# MC-2026-0441.",
+        "intents": [{"intent": "place_order", "confidence": 0.95, "text_span": "order for 50 x 5-gal pails of your waterborne polyurethane dispersion"}],
+        "status": "classified",
+        "ai_draft_response": None,
+        "ai_confidence": 0.0,
+    },
+    # order_status x2
+    {
+        "channel": "email", "from_address": "logistics@pacificcoatings.com",
+        "subject": "Where is PO-6621?",
+        "body": "Our PO-6621 was due last Friday and we still haven't received it. Can you provide a tracking update? Our production schedule depends on this delivery.",
+        "intents": [{"intent": "order_status", "confidence": 0.95, "text_span": "PO-6621 was due last Friday"}],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi,\n\nI've looked into PO-6621. The shipment is currently at the carrier's regional hub and shows an updated ETA of this Wednesday. I apologize for the delay and am escalating with the carrier for priority handling.\n\nBest regards",
+        "ai_confidence": 0.84,
+    },
+    {
+        "channel": "web", "from_address": "warehouse@reliablesupply.com",
+        "subject": "Tracking for ORD-8844",
+        "body": "Hi, do you have tracking info for ORD-8844? We placed it last Tuesday and haven't received a shipping confirmation yet.",
+        "intents": [{"intent": "order_status", "confidence": 0.94, "text_span": "tracking info for ORD-8844"}],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi,\n\nORD-8844 shipped yesterday via FedEx Freight. Your tracking number is 4567891230. Estimated delivery is March 12th.\n\nBest regards",
+        "ai_confidence": 0.87,
+    },
+    # technical_support x2
+    {
+        "channel": "email", "from_address": "r.gomez@advancedcomposites.com",
+        "subject": "Compatibility of ER-300 with carbon fiber layup",
+        "body": "We're switching from ER-500 to ER-300 for cost reasons. Will ER-300 maintain adequate adhesion on carbon fiber prepreg at 180°C cure? Any data on interlaminar shear strength?",
+        "intents": [{"intent": "technical_support", "confidence": 0.92, "text_span": "ER-300 maintain adequate adhesion on carbon fiber prepreg at 180°C cure"}],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi R. Gomez,\n\nER-300 is rated for cure temps up to 200°C and has been validated on carbon fiber layups. Interlaminar shear strength is typically 55-65 MPa depending on fiber treatment. I'll attach our application note with test data.\n\nBest regards",
+        "ai_confidence": 0.86,
+    },
+    {
+        "channel": "email", "from_address": "process@eliteplastics.com",
+        "subject": "Pot life of HD-100 hardener at 35°C",
+        "body": "Our mixing area runs around 35°C in summer. What's the expected pot life of HD-100 hardener mixed with ER-500 at that temperature? We're seeing gelling faster than the TDS suggests.",
+        "intents": [{"intent": "technical_support", "confidence": 0.90, "text_span": "pot life of HD-100 hardener mixed with ER-500 at that temperature"}],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi,\n\nAt 35°C ambient, pot life for the ER-500 / HD-100 system drops to approximately 25-30 minutes (vs. 45 min at 25°C). Consider mixing smaller batches or using our extended pot-life hardener HD-100X, which gives ~50 minutes at 35°C.\n\nBest regards",
+        "ai_confidence": 0.88,
+    },
+    # return_complaint x1
+    {
+        "channel": "email", "from_address": "qc@precisionplastics.com",
+        "subject": "Batch #BX-4410 out of spec",
+        "body": "Our QC tests show batch BX-4410 of POLYOX WSR-301 has viscosity at 6,200 cps — well above the 5,500 cps max on the TDS. We need a replacement batch or credit. CoA attached.",
+        "intents": [{"intent": "return_complaint", "confidence": 0.95, "text_span": "batch BX-4410 of POLYOX WSR-301 has viscosity at 6,200 cps — well above the 5,500 cps max"}],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi,\n\nThank you for flagging this. I've initiated an investigation on batch BX-4410. We'll have our QC lab re-test the retained sample and will issue a replacement or credit within 48 hours.\n\nRMA #: RMA-2026-0315\n\nBest regards",
+        "ai_confidence": 0.89,
+    },
+    # reorder x1
+    {
+        "channel": "email", "from_address": "orders@reliablesupply.com",
+        "subject": "March restock — same as February",
+        "body": "Hi, please repeat our February order: 500 kg ER-500, 200 kg HD-100, and 50 L SC-050. Same ship-to address and payment terms. Thanks!",
+        "intents": [{"intent": "reorder", "confidence": 0.94, "text_span": "repeat our February order"}],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi,\n\nI've pulled up your February order and everything matches. Your repeat order will be:\n\n- 500 kg ER-500: $6,250\n- 200 kg HD-100: $1,800\n- 50 L SC-050: $700\nTotal: $8,750\n\nShall I confirm and schedule shipment?\n\nBest regards",
+        "ai_confidence": 0.83,
+    },
+    # account_inquiry x1
+    {
+        "channel": "email", "from_address": "accounting@greenchemsolutions.com",
+        "subject": "Updated tax exemption certificate",
+        "body": "Attached is our renewed tax exemption certificate valid through 2027. Please update our account records. Also, can you confirm our current payment terms and outstanding balance?",
+        "intents": [{"intent": "account_inquiry", "confidence": 0.88, "text_span": "update our account records"}],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi,\n\nThank you for sending the updated tax exemption certificate. I've updated your account.\n\nYour current terms: NET30\nOutstanding balance: $8,420\n\nBest regards",
+        "ai_confidence": 0.85,
+    },
+    # sample_request x1
+    {
+        "channel": "web", "from_address": "formulation@novacoatings.com",
+        "subject": "Sample request — waterborne polyurethane",
+        "body": "We're developing a new low-VOC coating line. Can you send 1 kg samples of your top 2 waterborne polyurethane dispersions? We need them for lab trials next week.",
+        "intents": [{"intent": "sample_request", "confidence": 0.93, "text_span": "1 kg samples of your top 2 waterborne polyurethane dispersions"}],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi,\n\nGreat to hear about your new low-VOC line! I'll arrange 1 kg samples of:\n\n1. WPU-200 — General purpose, excellent adhesion\n2. WPU-350 — High durability, UV resistant\n\nExpect delivery within 3-5 business days. Could you confirm your shipping address?\n\nBest regards",
+        "ai_confidence": 0.90,
+    },
+    # multi-intent x2
+    {
+        "channel": "email", "from_address": "eng@newstartmaterials.com",
+        "subject": "New project — need pricing, docs, and samples",
+        "body": "We're kicking off a new adhesive project. Could you:\n1. Quote 500 kg of ER-500 epoxy resin\n2. Send the TDS and SDS for ER-500\n3. Ship a 1 kg sample so we can run lab tests before committing\nTimeline is tight — appreciate a fast turnaround.",
+        "intents": [
+            {"intent": "request_quote", "confidence": 0.92, "text_span": "Quote 500 kg of ER-500 epoxy resin"},
+            {"intent": "request_tds_sds", "confidence": 0.94, "text_span": "Send the TDS and SDS for ER-500"},
+            {"intent": "sample_request", "confidence": 0.91, "text_span": "Ship a 1 kg sample"},
+        ],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi,\n\n**1. Quote — 500 kg ER-500**\nUnit price: $12.50/kg → Total: $6,250 (NET30). Valid 30 days.\n\n**2. TDS & SDS**\nAttached to this email.\n\n**3. Sample**\n1 kg sample shipping today via ground — ETA 3-5 days.\n\nLet me know if you need anything else!\n\nBest regards",
+        "ai_confidence": 0.88,
+    },
+    {
+        "channel": "email", "from_address": "ops@southernindustrial.com",
+        "subject": "Reorder + delivery complaint",
+        "body": "Two things:\n1. Please reorder our standard monthly package (same as last month — 300 kg ER-500, 100 kg HD-100)\n2. Our last shipment arrived with a torn pallet wrap and one drum had a dented lid. We accepted it but want this noted on our account.",
+        "intents": [
+            {"intent": "reorder", "confidence": 0.93, "text_span": "reorder our standard monthly package"},
+            {"intent": "return_complaint", "confidence": 0.85, "text_span": "torn pallet wrap and one drum had a dented lid"},
+        ],
+        "status": "draft_ready",
+        "ai_draft_response": "Hi,\n\n**1. Reorder**\nI've prepared your monthly order:\n- 300 kg ER-500: $3,750\n- 100 kg HD-100: $900\nTotal: $4,650. Shall I confirm?\n\n**2. Shipping Damage**\nI've noted the damage on your account and filed a report with the carrier. If the dented drum affects product quality, please let us know and we'll arrange a replacement.\n\nBest regards",
+        "ai_confidence": 0.86,
+    },
 ]
 
 

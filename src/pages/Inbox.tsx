@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Inbox as InboxIcon, Mail, Filter, RefreshCw } from "lucide-react";
+import { Inbox as InboxIcon, Mail, Filter, RefreshCw, Plus } from "lucide-react";
 import { api, type InboxFilters, type InboxMessage } from "@/lib/api";
 import IntentBadge from "@/components/inbox/IntentBadge";
+import SimulateEmailDialog from "@/components/inbox/SimulateEmailDialog";
 
 const STATUS_OPTIONS = ["all", "new", "classified", "approved", "escalated", "sent"];
 const CHANNEL_OPTIONS = ["all", "email", "web", "fax"];
@@ -28,6 +29,7 @@ function parseIntents(raw: string | null): Array<{ intent: string; confidence: n
 export default function Inbox() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<InboxFilters>({ limit: 30 });
+  const [simulateOpen, setSimulateOpen] = useState(false);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["inbox-messages", filters],
@@ -65,14 +67,23 @@ export default function Inbox() {
             <p className="text-sm text-neutral-500">{total} messages</p>
           </div>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSimulateOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-industrial-600 px-3 py-2 text-sm font-medium text-white hover:bg-industrial-700"
+          >
+            <Plus size={14} />
+            Simulate Email
+          </button>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stats row */}
@@ -177,6 +188,8 @@ export default function Inbox() {
           </button>
         </div>
       )}
+
+      <SimulateEmailDialog open={simulateOpen} onOpenChange={setSimulateOpen} />
     </div>
   );
 }
