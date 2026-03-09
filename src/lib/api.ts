@@ -413,6 +413,43 @@ export interface GraphVizData {
   }>;
 }
 
+export interface CatalogProduct {
+  sku: string;
+  name: string;
+  description?: string;
+  manufacturer?: string;
+  cas_number?: string;
+  industries: string[];
+  has_tds: boolean;
+  has_sds: boolean;
+  source?: string;
+}
+
+export interface CatalogFilters {
+  manufacturers: string[];
+  industries: string[];
+}
+
+export interface ExtractionField {
+  value: string | number | string[] | null;
+  confidence: number;
+}
+
+export interface ProductExtraction {
+  sku: string;
+  tds: {
+    fields: Record<string, ExtractionField | string | number | null>;
+    pdf_url?: string;
+    revision_date?: string;
+  };
+  sds: {
+    fields: Record<string, ExtractionField | string | number | null>;
+    pdf_url?: string;
+    revision_date?: string;
+    cas_numbers?: string[];
+  };
+}
+
 // ---------- API Functions ----------
 
 export const api = {
@@ -575,4 +612,29 @@ export const api = {
     const qs = params.toString();
     return get<GraphVizData>(`/knowledge-base/graph-viz${qs ? `?${qs}` : ""}`);
   },
+
+  // Product Catalog (enhanced)
+  getCatalogProducts: (params: {
+    page?: number; pageSize?: number; search?: string;
+    manufacturer?: string; industry?: string;
+    has_tds?: boolean; has_sds?: boolean;
+  } = {}) => {
+    const p = new URLSearchParams();
+    if (params.page) p.set("page", String(params.page));
+    if (params.pageSize) p.set("page_size", String(params.pageSize));
+    if (params.search) p.set("search", params.search);
+    if (params.manufacturer) p.set("manufacturer", params.manufacturer);
+    if (params.industry) p.set("industry", params.industry);
+    if (params.has_tds !== undefined) p.set("has_tds", String(params.has_tds));
+    if (params.has_sds !== undefined) p.set("has_sds", String(params.has_sds));
+    const qs = p.toString();
+    return get<{ items: CatalogProduct[]; page: number; page_size: number; total: number }>(
+      `/knowledge-base/products${qs ? `?${qs}` : ""}`
+    );
+  },
+
+  getCatalogFilters: () => get<CatalogFilters>("/knowledge-base/filters"),
+
+  getProductExtraction: (sku: string) =>
+    get<ProductExtraction>(`/knowledge-base/products/${encodeURIComponent(sku)}/extraction`),
 };
